@@ -1,0 +1,22 @@
+# v0 sandbox internal files
+__v0_runtime_loader.js
+__v0_devtools.tsx
+__v0_jsx-dev-runtime.ts
+.snowflake/
+.v0-trash/
+.vercel/
+
+# Environment variables
+.env*.local
+
+# Common ignores
+node_modules
+.next/
+.DS_Store
+
+# Second Brain vault hygiene (per blueprint: never commit scratch, secrets, or Obsidian UI state)
+second-brain/.tmp/
+second-brain/.obsidian/
+second-brain/.env
+.env
+public/operator-os-source.zip
