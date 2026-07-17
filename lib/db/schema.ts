@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, serial, integer, date, numeric } from "drizzle-orm/pg-core"
+import { pgTable, text, timestamp, boolean, serial, integer, date, numeric, jsonb } from "drizzle-orm/pg-core"
 
 // --- Better Auth required tables -------------------------------------------
 // Column names are camelCase to match Better Auth's defaults. Do not rename.
@@ -594,6 +594,67 @@ export const paymentInstruments = pgTable("payment_instruments", {
   upiHandle: text("upiHandle").notNull().default(""),
   notes: text("notes").notNull().default(""),
   isActive: boolean("isActive").notNull().default(true),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
+// --- Settings Hub (central configuration) ------------------------------------
+// app_config: per-user JSON config store (general prefs, agent configs, funnel
+// seams). api_keys: BYO API keys, AES-encrypted via lib/crypto.ts; resolution
+// order everywhere is DB key -> env var fallback (see lib/config.ts).
+
+export const appConfig = pgTable("app_config", {
+  id: text("id").primaryKey(),
+  userId: text("userId").notNull(),
+  key: text("key").notNull(), // e.g. "leadgen", "funnels.meta_ads", "general"
+  value: jsonb("value").notNull().default({}),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+export const apiKeys = pgTable("api_keys", {
+  id: text("id").primaryKey(),
+  userId: text("userId").notNull(),
+  provider: text("provider").notNull(), // openrouter | tavily | brave | serper | google_maps | meta_ads
+  label: text("label").notNull().default(""),
+  encryptedKey: text("encryptedKey").notNull(), // AES-encrypted via lib/crypto.ts
+  lastFour: text("lastFour").notNull().default(""),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+// --- Lead-Gen Agent (Freelance Funnel automation) -----------------------------
+// Prospects are discovered + AI-qualified, then promoted into the existing
+// leads table (additive: the funnel pipeline itself is untouched).
+
+export const leadgenProspects = pgTable("leadgen_prospects", {
+  id: text("id").primaryKey(),
+  userId: text("userId").notNull(),
+  source: text("source").notNull().default("maps_no_website"), // maps_no_website | ai_upgrade | manual_seed
+  businessName: text("businessName").notNull(),
+  category: text("category").notNull().default(""),
+  location: text("location").notNull().default(""),
+  phone: text("phone").notNull().default(""),
+  website: text("website").notNull().default(""),
+  mapsUrl: text("mapsUrl").notNull().default(""),
+  signals: text("signals").notNull().default(""), // raw discovery signals
+  aiScore: integer("aiScore"), // 0-100 qualification score
+  aiRationale: text("aiRationale").notNull().default(""),
+  pitchAngle: text("pitchAngle").notNull().default(""),
+  status: text("status").notNull().default("discovered"), // discovered | qualified | promoted | rejected
+  promotedLeadId: integer("promotedLeadId"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+export const leadgenRuns = pgTable("leadgen_runs", {
+  id: text("id").primaryKey(),
+  userId: text("userId").notNull(),
+  trigger: text("trigger").notNull().default("manual"), // manual | cron
+  source: text("source").notNull().default("maps_no_website"),
+  query: text("query").notNull().default(""),
+  prospectsFound: integer("prospectsFound").notNull().default(0),
+  prospectsQualified: integer("prospectsQualified").notNull().default(0),
+  status: text("status").notNull().default("completed"), // running | completed | failed
+  errorMessage: text("errorMessage").notNull().default(""),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 

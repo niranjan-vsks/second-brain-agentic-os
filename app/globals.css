@@ -51,42 +51,46 @@
 
 :root {
   color-scheme: dark;
-  /* Command-center dark: near-black with a faint green cast */
-  --background: oklch(0.16 0.008 160);
-  --foreground: oklch(0.93 0.005 150);
-  --card: oklch(0.2 0.009 160);
-  --card-foreground: oklch(0.93 0.005 150);
-  --popover: oklch(0.2 0.009 160);
-  --popover-foreground: oklch(0.93 0.005 150);
+  /* Mission-control dark: deep near-black with a faint green cast, layered surfaces */
+  --background: oklch(0.13 0.007 160);
+  --foreground: oklch(0.94 0.005 150);
+  --card: oklch(0.17 0.008 160);
+  --card-foreground: oklch(0.94 0.005 150);
+  --popover: oklch(0.18 0.009 160);
+  --popover-foreground: oklch(0.94 0.005 150);
   /* Emerald primary */
   --primary: oklch(0.78 0.16 160);
-  --primary-foreground: oklch(0.17 0.01 160);
-  --secondary: oklch(0.26 0.01 160);
-  --secondary-foreground: oklch(0.93 0.005 150);
-  --muted: oklch(0.24 0.008 160);
-  --muted-foreground: oklch(0.65 0.008 155);
-  --accent: oklch(0.27 0.012 160);
-  --accent-foreground: oklch(0.93 0.005 150);
+  --primary-foreground: oklch(0.15 0.01 160);
+  --secondary: oklch(0.23 0.01 160);
+  --secondary-foreground: oklch(0.94 0.005 150);
+  --muted: oklch(0.21 0.008 160);
+  --muted-foreground: oklch(0.64 0.008 155);
+  --accent: oklch(0.24 0.012 160);
+  --accent-foreground: oklch(0.94 0.005 150);
   --destructive: oklch(0.62 0.19 25);
   --success: oklch(0.78 0.16 160);
   --warning: oklch(0.8 0.14 80);
-  --border: oklch(1 0 0 / 9%);
-  --input: oklch(1 0 0 / 13%);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 12%);
   --ring: oklch(0.78 0.16 160 / 60%);
   --chart-1: oklch(0.78 0.16 160);
   --chart-2: oklch(0.8 0.14 80);
   --chart-3: oklch(0.65 0.008 155);
   --chart-4: oklch(0.45 0.01 160);
   --chart-5: oklch(0.3 0.01 160);
-  --radius: 0.5rem;
-  --sidebar: oklch(0.18 0.009 160);
-  --sidebar-foreground: oklch(0.93 0.005 150);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.15 0.008 160);
+  --sidebar-foreground: oklch(0.94 0.005 150);
   --sidebar-primary: oklch(0.78 0.16 160);
-  --sidebar-primary-foreground: oklch(0.17 0.01 160);
-  --sidebar-accent: oklch(0.26 0.01 160);
-  --sidebar-accent-foreground: oklch(0.93 0.005 150);
-  --sidebar-border: oklch(1 0 0 / 9%);
+  --sidebar-primary-foreground: oklch(0.15 0.01 160);
+  --sidebar-accent: oklch(0.23 0.01 160);
+  --sidebar-accent-foreground: oklch(0.94 0.005 150);
+  --sidebar-border: oklch(1 0 0 / 8%);
   --sidebar-ring: oklch(0.78 0.16 160 / 60%);
+  /* Elevation layers for the 3D feel */
+  --surface-1: oklch(0.17 0.008 160);
+  --surface-2: oklch(0.2 0.009 160);
+  --surface-3: oklch(0.24 0.01 160);
 }
 
 @layer base {
@@ -95,5 +99,38 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  /* Layered card depth: hairline top-light + ambient shadow */
+  .surface-raised {
+    background:
+      linear-gradient(180deg, oklch(1 0 0 / 3.5%) 0%, oklch(1 0 0 / 0%) 45%),
+      var(--card);
+    border: 1px solid var(--border);
+    box-shadow:
+      0 1px 0 oklch(1 0 0 / 5%) inset,
+      0 8px 24px -12px oklch(0 0 0 / 55%);
+  }
+  .surface-glow {
+    box-shadow:
+      0 1px 0 oklch(1 0 0 / 5%) inset,
+      0 0 0 1px oklch(0.78 0.16 160 / 12%),
+      0 8px 32px -10px oklch(0.78 0.16 160 / 14%);
+  }
+  /* Faint blueprint grid backdrop */
+  .grid-backdrop {
+    background-image:
+      linear-gradient(oklch(1 0 0 / 2.5%) 1px, transparent 1px),
+      linear-gradient(90deg, oklch(1 0 0 / 2.5%) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: radial-gradient(ellipse 90% 70% at 50% 0%, black 30%, transparent 100%);
+  }
+  .text-micro {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
   }
 }

@@ -4,16 +4,39 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { FreelanceTab } from "@/components/freelance/freelance-tab"
 import { PrepTab } from "@/components/prep/prep-tab"
 import { LinkedinTab } from "@/components/linkedin/linkedin-tab"
 import { YoutubeTab } from "@/components/youtube/youtube-tab"
 import { CareerTab } from "@/components/career/career-tab"
 import { MoneyTab } from "@/components/money/money-tab"
+import { SettingsTab } from "@/components/settings/settings-tab"
 import { OsChat } from "@/components/os-chat"
 import { NotificationsBell } from "@/components/notifications-bell"
-import { Terminal, Briefcase, GraduationCap, LogOut, Megaphone, SquarePlay, MessageSquare, Target, Wallet } from "lucide-react"
+import {
+  Terminal,
+  Briefcase,
+  GraduationCap,
+  LogOut,
+  Megaphone,
+  SquarePlay,
+  MessageSquare,
+  Target,
+  Wallet,
+  Settings,
+  ChevronDown,
+  Sparkles,
+} from "lucide-react"
 import type {
   Deal,
   Asset,
@@ -61,6 +84,76 @@ interface DashboardProps {
   careerResumes: Resume[]
 }
 
+type SectionKey = "prep" | "freelance" | "linkedin" | "youtube" | "career" | "money" | "chat" | "settings"
+
+const SECTIONS: Record<
+  SectionKey,
+  { label: string; group: string; icon: typeof Terminal; title: string; description: string }
+> = {
+  prep: {
+    label: "FDE Prep",
+    group: "Career Ops",
+    icon: GraduationCap,
+    title: "FDE Interview Prep",
+    description: "Topics, drills, and resources for forward-deployed engineering readiness.",
+  },
+  career: {
+    label: "Career Intelligence",
+    group: "Career Ops",
+    icon: Target,
+    title: "Career Intelligence",
+    description: "Job pipeline, ATS scanner, resume tailoring, and deep company research.",
+  },
+  freelance: {
+    label: "Freelance Funnel",
+    group: "Business Ops",
+    icon: Briefcase,
+    title: "Freelance Funnel",
+    description: "Lead generation, deal pipeline, and delivery assets for the AI agency.",
+  },
+  linkedin: {
+    label: "LinkedIn OS",
+    group: "Business Ops",
+    icon: Megaphone,
+    title: "LinkedIn OS",
+    description: "Trend radar, voice-true post drafting, and human-in-the-loop publishing.",
+  },
+  youtube: {
+    label: "YouTube Studio",
+    group: "Business Ops",
+    icon: SquarePlay,
+    title: "YouTube Pipeline",
+    description: "Faceless channel automation: scripts, generation, uploads, and analytics.",
+  },
+  money: {
+    label: "Money OS",
+    group: "Life Ops",
+    icon: Wallet,
+    title: "Money OS",
+    description: "Autopay guardian: instruments, mandates, reminders, and cancellation playbooks.",
+  },
+  chat: {
+    label: "Jarvis",
+    group: "Assistant",
+    icon: MessageSquare,
+    title: "Jarvis",
+    description: "Tool-calling assistant with voice: your data, calendar, and autopays.",
+  },
+  settings: {
+    label: "Settings",
+    group: "System",
+    icon: Settings,
+    title: "Settings Hub",
+    description: "Central configuration: models, connections, API keys, agents, and funnels.",
+  },
+}
+
+const NAV_GROUPS: { name: string; items: SectionKey[] }[] = [
+  { name: "Career Ops", items: ["prep", "career"] },
+  { name: "Business Ops", items: ["freelance", "linkedin", "youtube"] },
+  { name: "Life Ops", items: ["money"] },
+]
+
 export function Dashboard({
   userName,
   deals,
@@ -86,6 +179,7 @@ export function Dashboard({
 }: DashboardProps) {
   const router = useRouter()
   const [signingOut, setSigningOut] = useState(false)
+  const [active, setActive] = useState<SectionKey>("prep")
 
   async function handleSignOut() {
     setSigningOut(true)
@@ -94,55 +188,142 @@ export function Dashboard({
     router.refresh()
   }
 
+  const section = SECTIONS[active]
+  const SectionIcon = section.icon
+
   return (
     <main className="min-h-screen bg-background">
-      <Tabs defaultValue="prep" className="gap-0">
-        <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
-          <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-3 md:px-6">
-            <div className="flex items-center gap-2">
-              <Terminal className="size-5 text-primary" aria-hidden="true" />
+      <Tabs value={active} onValueChange={(v) => setActive(v as SectionKey)} className="gap-0">
+        <header className="sticky top-0 z-30 border-b border-border bg-background/85 backdrop-blur-md">
+          <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-2.5 md:px-6">
+            <button
+              type="button"
+              onClick={() => setActive("prep")}
+              className="flex items-center gap-2 rounded-md px-1.5 py-1 transition-colors hover:bg-accent"
+            >
+              <span className="flex size-6 items-center justify-center rounded-md bg-primary/15 text-primary">
+                <Terminal className="size-3.5" aria-hidden="true" />
+              </span>
               <span className="font-mono text-sm font-semibold tracking-tight">operator_os</span>
-            </div>
-            <TabsList className="order-3 w-full md:order-none md:mx-6 md:w-auto">
-              <TabsTrigger value="prep" className="gap-2">
-                <GraduationCap className="size-4" aria-hidden="true" />
-                FDE Prep
-              </TabsTrigger>
-              <TabsTrigger value="freelance" className="gap-2">
-                <Briefcase className="size-4" aria-hidden="true" />
-                Freelance Funnel
-              </TabsTrigger>
-              <TabsTrigger value="linkedin" className="gap-2">
-                <Megaphone className="size-4" aria-hidden="true" />
-                LinkedIn OS
-              </TabsTrigger>
-              <TabsTrigger value="youtube" className="gap-2">
-                <SquarePlay className="size-4" aria-hidden="true" />
-                YouTube
-              </TabsTrigger>
-              <TabsTrigger value="career" className="gap-2">
-                <Target className="size-4" aria-hidden="true" />
-                Career
-              </TabsTrigger>
-              <TabsTrigger value="money" className="gap-2">
-                <Wallet className="size-4" aria-hidden="true" />
-                Money
-              </TabsTrigger>
-              <TabsTrigger value="chat" className="gap-2">
-                <MessageSquare className="size-4" aria-hidden="true" />
+            </button>
+
+            {/* Desktop nav: grouped dropdowns */}
+            <nav className="ml-4 hidden items-center gap-0.5 md:flex" aria-label="Primary">
+              {NAV_GROUPS.map((group) => {
+                const groupActive = group.items.includes(active)
+                return (
+                  <DropdownMenu key={group.name}>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className={`gap-1.5 text-[13px] ${groupActive ? "bg-accent text-foreground" : "text-muted-foreground"}`}
+                        >
+                          {group.name}
+                          <ChevronDown className="size-3.5 opacity-60" aria-hidden="true" />
+                        </Button>
+                      }
+                    />
+                    <DropdownMenuContent align="start" className="w-64 surface-raised">
+                      <DropdownMenuGroup>
+                        <DropdownMenuLabel className="text-micro text-muted-foreground">
+                          {group.name}
+                        </DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        {group.items.map((key) => {
+                          const item = SECTIONS[key]
+                          const ItemIcon = item.icon
+                          return (
+                            <DropdownMenuItem
+                              key={key}
+                              onClick={() => setActive(key)}
+                              className={`gap-3 py-2.5 ${active === key ? "bg-accent" : ""}`}
+                            >
+                              <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-secondary text-primary">
+                                <ItemIcon className="size-4" aria-hidden="true" />
+                              </span>
+                              <span className="flex flex-col gap-0.5">
+                                <span className="text-sm font-medium leading-none">{item.label}</span>
+                                <span className="line-clamp-1 text-xs text-muted-foreground">{item.description}</span>
+                              </span>
+                            </DropdownMenuItem>
+                          )
+                        })}
+                      </DropdownMenuGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )
+              })}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setActive("chat")}
+                className={`gap-1.5 text-[13px] ${active === "chat" ? "bg-accent text-foreground" : "text-muted-foreground"}`}
+              >
+                <Sparkles className="size-3.5 text-primary" aria-hidden="true" />
                 Jarvis
-              </TabsTrigger>
-            </TabsList>
-            <div className="ml-auto flex items-center gap-3">
+              </Button>
+            </nav>
+
+            <div className="ml-auto flex items-center gap-1.5">
               <NotificationsBell />
-              <span className="hidden font-mono text-xs text-muted-foreground sm:inline">{userName}</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setActive("settings")}
+                aria-label="Settings"
+                className={active === "settings" ? "bg-accent" : ""}
+              >
+                <Settings className="size-4" aria-hidden="true" />
+              </Button>
+              <span className="hidden font-mono text-xs text-muted-foreground lg:inline">{userName}</span>
               <Button variant="ghost" size="sm" onClick={handleSignOut} disabled={signingOut} className="gap-1.5">
                 <LogOut className="size-4" aria-hidden="true" />
-                <span className="sr-only sm:not-sr-only">Sign out</span>
+                <span className="sr-only">Sign out</span>
               </Button>
             </div>
           </div>
+
+          {/* Mobile nav: horizontal scroll strip */}
+          <nav className="flex gap-1 overflow-x-auto px-4 pb-2 md:hidden" aria-label="Sections">
+            {(Object.keys(SECTIONS) as SectionKey[]).map((key) => {
+              const item = SECTIONS[key]
+              const ItemIcon = item.icon
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setActive(key)}
+                  className={`flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                    active === key
+                      ? "border-primary/40 bg-primary/10 text-primary"
+                      : "border-border bg-secondary text-muted-foreground"
+                  }`}
+                >
+                  <ItemIcon className="size-3.5" aria-hidden="true" />
+                  {item.label}
+                </button>
+              )
+            })}
+          </nav>
         </header>
+
+        {/* Section hero strip */}
+        <div className="grid-backdrop border-b border-border">
+          <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-6 md:px-6 md:py-8">
+            <span className="surface-raised flex size-12 shrink-0 items-center justify-center rounded-xl text-primary">
+              <SectionIcon className="size-5" aria-hidden="true" />
+            </span>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <span className="text-micro text-primary">{section.group}</span>
+              </div>
+              <h1 className="text-xl font-semibold tracking-tight text-balance md:text-2xl">{section.title}</h1>
+              <p className="text-sm text-muted-foreground text-pretty">{section.description}</p>
+            </div>
+          </div>
+        </div>
 
         <div className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6">
           <TabsContent value="prep">
@@ -171,6 +352,9 @@ export function Dashboard({
           </TabsContent>
           <TabsContent value="chat">
             <OsChat />
+          </TabsContent>
+          <TabsContent value="settings">
+            <SettingsTab />
           </TabsContent>
         </div>
       </Tabs>
