@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "jetro": {
+      "command": "C:\\Users\\NIRANJAN VSKS\\.jetro\\runtime\\node-win32-x64.exe",
+      "args": [
+        "C:\\Users\\NIRANJAN VSKS\\.jetro\\mcp-server\\index.js"
+      ],
+      "env": {
+        "JET_WORKSPACE": "c:\\Users\\NIRANJAN VSKS\\OneDrive\\Desktop\\Niranjan_Stuff\\second-brain-os",
+        "JET_API_URL": "https://api.jetro.ai",
+        "PATH": "C:\\Users\\NIRANJAN VSKS\\.jetro\\runtime;C:\\Windows\\system32;C:\\Windows;C:\\Windows\\System32\\Wbem;C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\;C:\\Windows\\System32\\OpenSSH\\;C:\\Program Files\\Git\\cmd;C:\\Program Files\\nodejs\\;C:\\ProgramData\\chocolatey\\bin;C:\\Program Files\\Git\\bin\\;C:\\Users\\NIRANJAN VSKS\\AppData\\Roaming\\Python\\Python314\\Scripts;C:\\Program Files\\GitHub CLI\\;C:\\Users\\NIRANJAN VSKS\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts;C:\\Users\\NIRANJAN VSKS\\AppData\\Local\\Programs\\Python\\Python312\\Scripts\\;C:\\Users\\NIRANJAN VSKS\\AppData\\Local\\Programs\\Python\\Python312\\;C:\\Users\\NIRANJAN VSKS\\miniconda3;C:\\Users\\NIRANJAN VSKS\\miniconda3\\Library\\mingw-w64\\bin;C:\\Users\\NIRANJAN VSKS\\miniconda3\\Library\\usr\\bin;C:\\Users\\NIRANJAN VSKS\\miniconda3\\Library\\bin;C:\\Users\\NIRANJAN VSKS\\miniconda3\\Scripts;C:\\Users\\NIRANJAN VSKS\\AppData\\Local\\Microsoft\\WindowsApps;C:\\Users\\NIRANJAN VSKS\\AppData\\Local\\Programs\\Antigravity\\bin;C:\\Users\\NIRANJAN VSKS\\AppData\\Roaming\\npm;C:\\Users\\NIRANJAN VSKS\\AppData\\Local\\Python\\bin;C:\\Users\\NIRANJAN VSKS\\AppData\\Local\\Programs\\Microsoft VS Code\\bin;C:\\Program Files\\Git\\bin\\;C:\\Users\\NIRANJAN VSKS\\.local\\bin;C:\\Users\\NIRANJAN VSKS\\AppData\\Roaming\\Python\\Python314\\Scripts;C:\\Users\\NIRANJAN VSKS\\AppData\\Local\\GitHubDesktop\\bin;C:\\Users\\NIRANJAN VSKS\\.bun\\bin;C:\\Users\\NIRANJAN VSKS\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BurntSushi.ripgrep.MSVC_Microsoft.Winget.Source_8wekyb3d8bbwe\\ripgrep-15.1.0-x86_64-pc-windows-msvc;C:\\Users\\NIRANJAN VSKS\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.1-full_build\\bin;C:\\Users\\NIRANJAN VSKS\\AppData\\Local\\Programs\\Antigravity IDE\\bin"
+      }
+    }
+  }
+}
