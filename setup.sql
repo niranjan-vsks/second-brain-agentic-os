@@ -629,8 +629,71 @@ CREATE TABLE IF NOT EXISTS "autopays" (
 
 
 -- =============================================================================
--- Done. 40 tables created.
+-- SECTION 8: SETTINGS HUB + LEAD-GEN AGENT (4 tables)
+-- =============================================================================
+
+-- Per-user JSON config store (Settings Hub: general prefs, agent configs, funnel seams)
+CREATE TABLE IF NOT EXISTS "app_config" (
+  "id" text PRIMARY KEY,
+  "userId" text NOT NULL,
+  "key" text NOT NULL,
+  "value" jsonb NOT NULL DEFAULT '{}',
+  "updatedAt" timestamp NOT NULL DEFAULT now(),
+  UNIQUE("userId", "key")
+);
+
+-- BYO API keys: AES-encrypted via lib/crypto.ts. NEVER add to the Ask OS allowlist.
+CREATE TABLE IF NOT EXISTS "api_keys" (
+  "id" text PRIMARY KEY,
+  "userId" text NOT NULL,
+  "provider" text NOT NULL,
+  "label" text NOT NULL DEFAULT '',
+  "encryptedKey" text NOT NULL,
+  "lastFour" text NOT NULL DEFAULT '',
+  "createdAt" timestamp NOT NULL DEFAULT now(),
+  "updatedAt" timestamp NOT NULL DEFAULT now(),
+  UNIQUE("userId", "provider")
+);
+
+-- Lead-gen agent: discovered businesses, AI-qualified, promotable into leads
+CREATE TABLE IF NOT EXISTS "leadgen_prospects" (
+  "id" text PRIMARY KEY,
+  "userId" text NOT NULL,
+  "source" text NOT NULL DEFAULT 'maps_no_website' CHECK ("source" IN ('maps_no_website','ai_upgrade','manual_seed')),
+  "businessName" text NOT NULL,
+  "category" text NOT NULL DEFAULT '',
+  "location" text NOT NULL DEFAULT '',
+  "phone" text NOT NULL DEFAULT '',
+  "website" text NOT NULL DEFAULT '',
+  "mapsUrl" text NOT NULL DEFAULT '',
+  "signals" text NOT NULL DEFAULT '',
+  "aiScore" integer,
+  "aiRationale" text NOT NULL DEFAULT '',
+  "pitchAngle" text NOT NULL DEFAULT '',
+  "status" text NOT NULL DEFAULT 'discovered' CHECK ("status" IN ('discovered','qualified','promoted','rejected')),
+  "promotedLeadId" integer,
+  "createdAt" timestamp NOT NULL DEFAULT now(),
+  "updatedAt" timestamp NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS "leadgen_runs" (
+  "id" text PRIMARY KEY,
+  "userId" text NOT NULL,
+  "trigger" text NOT NULL DEFAULT 'manual',
+  "source" text NOT NULL DEFAULT 'maps_no_website',
+  "query" text NOT NULL DEFAULT '',
+  "prospectsFound" integer NOT NULL DEFAULT 0,
+  "prospectsQualified" integer NOT NULL DEFAULT 0,
+  "status" text NOT NULL DEFAULT 'completed' CHECK ("status" IN ('running','completed','failed')),
+  "errorMessage" text NOT NULL DEFAULT '',
+  "createdAt" timestamp NOT NULL DEFAULT now()
+);
+
+
+-- =============================================================================
+-- Done. 44 tables created.
 -- Breakdown: 4 Better Auth + 5 Freelance Funnel + 4 FDE Prep + 7 LinkedIn OS
 --          + 11 YouTube Pipeline / Ad Creative / Chat / Edits
 --          + 12 Career Intelligence + 3 Jarvis Connections / Money OS
+--          + 4 Settings Hub / Lead-Gen Agent
 -- =============================================================================

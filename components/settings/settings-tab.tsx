@@ -372,7 +372,7 @@ function KeysSection({ data, onSaved }: { data: Snapshot; onSaved: () => void })
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
-            <Select value={provider} onValueChange={setProvider}>
+            <Select value={provider} onValueChange={(v) => setProvider(v ?? "")}>
               <SelectTrigger aria-label="Provider">
                 <SelectValue placeholder="Provider" />
               </SelectTrigger>

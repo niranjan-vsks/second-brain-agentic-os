@@ -9,6 +9,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -212,38 +213,44 @@ export function Dashboard({
                 const groupActive = group.items.includes(active)
                 return (
                   <DropdownMenu key={group.name}>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className={`gap-1.5 text-[13px] ${groupActive ? "bg-accent text-foreground" : "text-muted-foreground"}`}
-                      >
-                        {group.name}
-                        <ChevronDown className="size-3.5 opacity-60" aria-hidden="true" />
-                      </Button>
-                    </DropdownMenuTrigger>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className={`gap-1.5 text-[13px] ${groupActive ? "bg-accent text-foreground" : "text-muted-foreground"}`}
+                        >
+                          {group.name}
+                          <ChevronDown className="size-3.5 opacity-60" aria-hidden="true" />
+                        </Button>
+                      }
+                    />
                     <DropdownMenuContent align="start" className="w-64 surface-raised">
-                      <DropdownMenuLabel className="text-micro text-muted-foreground">{group.name}</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      {group.items.map((key) => {
-                        const item = SECTIONS[key]
-                        const ItemIcon = item.icon
-                        return (
-                          <DropdownMenuItem
-                            key={key}
-                            onSelect={() => setActive(key)}
-                            className={`gap-3 py-2.5 ${active === key ? "bg-accent" : ""}`}
-                          >
-                            <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-secondary text-primary">
-                              <ItemIcon className="size-4" aria-hidden="true" />
-                            </span>
-                            <span className="flex flex-col gap-0.5">
-                              <span className="text-sm font-medium leading-none">{item.label}</span>
-                              <span className="line-clamp-1 text-xs text-muted-foreground">{item.description}</span>
-                            </span>
-                          </DropdownMenuItem>
-                        )
-                      })}
+                      <DropdownMenuGroup>
+                        <DropdownMenuLabel className="text-micro text-muted-foreground">
+                          {group.name}
+                        </DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        {group.items.map((key) => {
+                          const item = SECTIONS[key]
+                          const ItemIcon = item.icon
+                          return (
+                            <DropdownMenuItem
+                              key={key}
+                              onClick={() => setActive(key)}
+                              className={`gap-3 py-2.5 ${active === key ? "bg-accent" : ""}`}
+                            >
+                              <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-secondary text-primary">
+                                <ItemIcon className="size-4" aria-hidden="true" />
+                              </span>
+                              <span className="flex flex-col gap-0.5">
+                                <span className="text-sm font-medium leading-none">{item.label}</span>
+                                <span className="line-clamp-1 text-xs text-muted-foreground">{item.description}</span>
+                              </span>
+                            </DropdownMenuItem>
+                          )
+                        })}
+                      </DropdownMenuGroup>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )

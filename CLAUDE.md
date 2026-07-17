@@ -4,20 +4,23 @@
 
 ---
 
-## 0. CURRENT STATUS — START HERE (last updated: Jarvis + Money OS + tiered routing build)
+## 0. CURRENT STATUS — START HERE (last updated: Settings Hub + Lead-Gen Agent + premium shell build)
 
-**Six dashboard tabs, all live:** FDE Prep · Freelance Funnel · LinkedIn OS · YouTube (Ads/Creative) · Career · Money, plus the Jarvis chat tab (tool-calling upgrade of Ask OS).
+**App shell:** premium dark "mission control" theme with a top navbar and grouped dropdown navigation — Career Ops (FDE Prep, Career Intelligence) · Business Ops (Freelance Funnel, LinkedIn OS, YouTube Studio) · Life Ops (Money OS) · Jarvis (direct button) · Settings Hub (gear icon). The old flat 8-tab row is gone; sections render inside the same `components/dashboard.tsx` state machine (`SectionKey`).
 
 | Subsystem | State | Blocking env (if any) |
 |---|---|---|
 | FDE Prep, Freelance Funnel | Fully live | — |
+| Lead-Gen Agent (Freelance → Lead-Gen Agent sub-tab) | Fully live UI + agent; discovery needs a key | `GOOGLE_MAPS_API_KEY` or Tavily/Brave/Serper key (Settings → API Keys or env) |
 | LinkedIn OS | Fully live (HITL, never auto-posts) | — |
 | YouTube pipeline | UI + state machines live; generation/upload are env-activated stubs | See §10 stub activation map |
 | Career Intelligence | Fully live; scanner cron runs 4-hourly; FDE Master resume loaded; owner settings seeded | Search provider + browser worker optional (§10-style seams) |
 | Tiered model routing | Fully live (light/standard/heavy, all call sites annotated) | Optional per-tier overrides: `GATEWAY_MODEL_{LIGHT,STANDARD,HEAVY}` |
+| Settings Hub (gear icon) | Fully live: General, Model Routing (live tier view), Connections, API Key Vault (AES at rest), Agents (lead-gen config), Funnels (Meta Ads seam) | — |
 | Jarvis (tool-loop chat + voice) | Fully live | Calendar tools need Google OAuth (below) |
 | Google Calendar | Code complete; needs `GOOGLE_CLIENT_ID/SECRET` + Calendar API enabled + `/api/auth/google-calendar/callback` registered as redirect URI | Same Google app as YouTube |
 | Money OS (autopay guardian) | Fully live; owner's 4 instruments seeded; reminder cron daily 8:00 IST | — |
+| Meta Ads funnel | Config seam only (Settings → Funnels): account ID + token stored, no campaign push yet (deliberate deferral) | `META_ADS_ACCESS_TOKEN` when built |
 
 **Non-negotiable invariants (violating these = quality degradation):**
 1. Additive-only: never break FDE Prep / Freelance Funnel / LinkedIn OS / YouTube when adding features.
@@ -27,12 +30,14 @@
 5. Money OS: metadata only — never store card numbers, CVVs, PINs, or bank credentials. Cancellation is playbook-driven (no consumer mandate-cancellation API exists in India).
 6. Tokens (YouTube, Calendar) are AES-encrypted via `lib/crypto.ts` before hitting the DB.
 7. Never port profile.yml/cv.md from the career-ops repo (stale AI-PM versions). The live master resume is the "FDE Master" row in the resumes table.
+8. BYO API keys: AES-encrypted in `api_keys` table, resolution order is ALWAYS stored key → env fallback (`resolveApiKey()` in `lib/config.ts`). Full key values are never returned to the client after saving — only lastFour.
+9. Lead-Gen Agent promotes prospects INTO the existing `leads` table — it never modifies the funnel pipeline schema or stages.
 
 **Owner context you must know:** owner account = `nakri981@gmail.com`; comp guardrails ₹30–50L floor / ₹75L+ stretch (domestic), $5–7k/mo floor (international remote); FDE-first role families (fde, genai_arch, solutions, ai_pm); accounts tracked in Money OS: HDFC Debit, Tata Neu Infinity HDFC CC, Kotak 811 Debit, SBI Debit (Skydo planned for international freelancing).
 
 **Deferred / open work (intentional):** §8 LinkedIn deferred list · §10 YouTube stub activation + PRD §13 deferrals · WealthOS (separate app, separate chat) is NOT part of this repo. No other known bugs or half-finished work at handoff time.
 
-**Docs map:** this file (architecture + invariants) · `SETUP.md` (operator's usage guide) · `setup.sql` (full DDL, 40 tables, already applied — never re-run against prod) · `.env.example` (every env var, annotated).
+**Docs map:** this file (architecture + invariants) · `SETUP.md` (operator's usage guide) · `setup.sql` (full DDL, 44 tables, already applied — never re-run against prod) · `.env.example` (every env var, annotated).
 
 ---
 
@@ -270,7 +275,22 @@ Autopay guardian for the owner's Indian accounts. **SECURITY CONSTITUTION: no ba
 ### 3 new tables
 connected_accounts (encrypted OAuth), payment_instruments (metadata only), autopays (status: active → cancel_requested → cancelled | paused). payment_instruments + autopays are in the Ask OS allowlist.
 
-## 13. How to Refine This Codebase
+## 13. Settings Hub + Lead-Gen Agent + Premium Shell
+
+### Settings Hub — `components/settings/settings-tab.tsx`, `app/actions/settings.ts`, `lib/config.ts`
+Central configuration surface (gear icon in navbar). Six sections: **General** (display name, timezone, notification toggles → `app_config` key "general"), **Model Routing** (read-only live view of the tier registry + env override names — models are still env-controlled by design, so a bad UI edit can't brick agents), **Connections** (status cards for Google/YouTube/Calendar/Telegram/Higgsfield MCP; MCP note: Higgsfield is connected at the v0 chat level, not in-app), **API Key Vault** (BYO keys: OpenRouter, Tavily, Brave, Serper, Google Maps, Meta Ads — AES-encrypted into `api_keys`, lastFour shown, never returned after save), **Agents** (lead-gen agent config → `app_config` key "leadgen": ICP categories, locations, min score, daily cap, auto-run toggle), **Funnels** (Meta Ads seam → `app_config` key "funnels.meta_ads": account ID + token; no campaign push built yet — deliberate).
+`lib/config.ts` is the resolution seam: `resolveApiKey(userId, provider)` → decrypted stored key or env fallback; `getConfig/setConfig` for JSON config. Anything needing a key must go through this, never read env directly for BYO-able providers.
+
+### Lead-Gen Agent — `lib/leadgen.ts`, `app/actions/leadgen.ts`, `app/api/cron/leadgen-agent`, `components/freelance/leadgen-panel.tsx`
+Pipeline: **discover → AI-qualify → review → promote**. Discovery source A: Google Places API (`GOOGLE_MAPS_API_KEY` or stored key) finds local businesses WITHOUT websites (classic freelance wedge). Source B: web search (Tavily/Brave/Serper via the same provider seam as career deep-research) finds businesses with outdated sites / AI-upgrade candidates. Qualifier: `leadgen.qualify` (standard tier) scores 0–100 against the owner's ICP config with rationale + pitch angle; score ≥ minScore → `qualified`. Promotion inserts into the existing `leads` table (source tagged) — funnel pipeline untouched. Cron: daily 4:00 UTC, runs only if `autoRun` enabled in config. All runs audited in `leadgen_runs`.
+
+### Premium shell — `components/dashboard.tsx`, `app/globals.css`
+Top navbar with Base UI dropdown groups (NOTE: this project's dropdown-menu is Base UI-based — use `render={<Button/>}` not `asChild`, `onClick` not `onSelect`, and labels must sit inside `DropdownMenuGroup`). Design tokens: deeper background (oklch 0.13), elevation utilities `.surface-raised` / `.surface-glow` / `.grid-backdrop` / `.text-micro` in globals.css. Section header strip shows group + section name. Mobile: horizontal scroll chip nav. All section components (FdeTab, FreelanceTab, etc.) were NOT modified — only the shell around them.
+
+### 4 new tables
+`app_config` (per-user JSON store, unique userId+key) · `api_keys` (encrypted, unique userId+provider) · `leadgen_prospects` (status: discovered → qualified → promoted | rejected) · `leadgen_runs` (audit). All in Ask OS allowlist? NO — deliberately excluded (api_keys must never be queryable via chat SQL; prospects/runs can be added later if wanted).
+
+## 14. How to Refine This Codebase
 
 1. Read this doc, then read `lib/constants.ts`, `lib/db/schema.ts`, `app/actions/*.ts`, and `components/dashboard.tsx` — that's ~80% of the mental model.
 2. Follow existing patterns exactly: server action + `getUserId()` + userId-scoped queries + `revalidatePath` / SWR `mutate`.

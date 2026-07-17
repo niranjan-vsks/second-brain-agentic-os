@@ -6,6 +6,7 @@ import { AssetLibrary } from "@/components/freelance/asset-library"
 import { OutreachTracker } from "@/components/freelance/outreach-tracker"
 import { ArtifactGenerator } from "@/components/freelance/artifact-generator"
 import { AdCreativeStudio } from "@/components/freelance/ad-creative-studio"
+import { LeadgenPanel } from "@/components/freelance/leadgen-panel"
 import type { Deal, Asset, Lead, Artifact } from "@/lib/types"
 
 interface FreelanceTabProps {
@@ -31,6 +32,7 @@ export function FreelanceTab({ deals, assets, leads, artifacts }: FreelanceTabPr
       <Tabs defaultValue="pipeline" className="gap-4">
         <TabsList className="w-full justify-start overflow-x-auto md:w-auto">
           <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
+          <TabsTrigger value="leadgen">Lead-Gen Agent</TabsTrigger>
           <TabsTrigger value="outreach">Outreach</TabsTrigger>
           <TabsTrigger value="library">Asset Library</TabsTrigger>
           <TabsTrigger value="artifacts">Artifacts</TabsTrigger>
@@ -38,6 +40,9 @@ export function FreelanceTab({ deals, assets, leads, artifacts }: FreelanceTabPr
         </TabsList>
         <TabsContent value="pipeline">
           <PipelineBoard deals={deals} />
+        </TabsContent>
+        <TabsContent value="leadgen">
+          <LeadgenPanel />
         </TabsContent>
         <TabsContent value="outreach">
           <OutreachTracker leads={leads} />
