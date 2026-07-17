@@ -5,6 +5,7 @@
     { "path": "/api/cron/upload-worker", "schedule": "*/5 * * * *" },
     { "path": "/api/cron/analytics-poller", "schedule": "0 */6 * * *" },
     { "path": "/api/cron/career-scanner", "schedule": "0 */4 * * *" },
-    { "path": "/api/cron/autopay-reminder", "schedule": "30 2 * * *" }
+    { "path": "/api/cron/autopay-reminder", "schedule": "30 2 * * *" },
+    { "path": "/api/cron/leadgen-agent", "schedule": "0 4 * * *" }
   ]
 }
