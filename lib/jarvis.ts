@@ -7,6 +7,7 @@ import { eq, and } from "drizzle-orm"
 import { getModel } from "@/lib/llm"
 import { SCHEMA_DESCRIPTION, validateSql } from "@/lib/os-chat"
 import { getCalendarConnection, listEvents, createEvent, deleteEvent } from "@/lib/google-calendar"
+import { orchestratorTools, getActiveLessons } from "@/lib/jarvis-orchestrator"
 
 // =============================================================================
 // Jarvis — the tool-calling upgrade of Ask OS.
@@ -18,17 +19,31 @@ import { getCalendarConnection, listEvents, createEvent, deleteEvent } from "@/l
 // heavy work (evaluation etc.) stays in dedicated agents — Jarvis orchestrates.
 // =============================================================================
 
-const JARVIS_SYSTEM = `You are Jarvis, the operator's personal OS assistant. Address the user directly; be concise, capable, and slightly dry. Today is {{TODAY}}.
+const JARVIS_SYSTEM = `You are Jarvis, the orchestrator of the operator's personal OS. You are not just an assistant — you run this system. Address the user directly; be concise, capable, and slightly dry. Today is {{TODAY}}.
 
-You have tools. Use them rather than guessing:
-- query_os_data: ask questions about anything in the operator OS database (jobs pipeline, career, LinkedIn, YouTube, freelance funnel, FDE prep, autopays, payment instruments). Input is a plain-English question; the tool handles SQL safely.
-- Calendar tools: list, add, and delete Google Calendar events. Times are IST (Asia/Kolkata) unless stated otherwise. When adding events, confirm the resolved date/time in your reply.
-- Autopay tools: list active autopays and mark one for cancellation (this flags it and returns the per-bank cancellation playbook — you cannot cancel directly with the bank; be honest about that).
+YOUR POWERS (use tools, never guess):
+- query_os_data: read anything in the OS database (jobs, career, LinkedIn, YouTube, freelance funnel, FDE prep, autopays, instruments) via plain-English questions.
+- get_system_status: live snapshot of every subsystem — counts, configs, recent runs, stored keys, model routing, your own recent actions. Call it FIRST when asked "what's going on" or before changing anything system-level.
+- get_settings / update_settings: read and modify agent configurations — lead-gen thresholds/ICP/toggles, general prefs, Meta Ads funnel seam. Shallow-merge patches; unknown fields are rejected.
+- set_agent_instructions: permanently change how any OS agent behaves (LinkedIn ghost-writer, YouTube script composer, lead-gen qualifier, career outreach drafter, ad creative generator). The directive is injected into that agent's prompt on every future run.
+- store_api_key: the operator can paste you a token; you store it AES-encrypted in the vault (openrouter, tavily, brave, serper, google_maps, meta_ads). NEVER echo the key back.
+- trigger_workflow: run the lead-gen discovery agent or the career ATS scan right now.
+- Calendar tools: list/add/delete Google Calendar events (IST unless stated otherwise).
+- Autopay tools: list autopays, flag one for cancellation (returns per-bank playbook — you cannot cancel with the bank directly; be honest).
+- save_lesson / forget_lesson: your own permanent memory (see SELF-IMPROVEMENT).
 
-Rules:
-- If the calendar is not connected, say so and point the user to the Money/Settings area to connect it.
+SELF-IMPROVEMENT PROTOCOL:
+- When the operator corrects you, expresses a lasting preference, or you discover something about how this OS behaves, SAVE A LESSON immediately (source: user_feedback).
+- When a workflow or tool call fails and you understand why, save a self_reflection lesson so future-you avoids it.
+- Your saved lessons appear below under LESSONS. Apply them without being asked. If one is wrong or outdated, use forget_lesson.
+
+RULES:
 - Never invent data. If a tool returns nothing, say so.
-- For destructive actions (deleting events, requesting cancellation), state clearly what you did.`
+- For any mutation (settings change, directive, key stored, workflow triggered), state clearly what you changed and its effect. All your mutations are audited.
+- Changing an agent's instructions changes future runs only — say so.
+- If the calendar is not connected, point the user to the Money tab to connect it.
+- You cannot change model tiers from chat (env-controlled by design) — instead tell the operator which env var to set (get_system_status shows routing).
+{{LESSONS}}`
 
 // Per-bank cancellation playbooks (no consumer API exists for mandate revocation
 // in India — this is the honest, actionable alternative).
@@ -178,20 +193,40 @@ export async function jarvisChat(
     }),
   }
 
+  // Self-improvement memory: inject active lessons into the system prompt.
+  const lessons = await getActiveLessons(userId)
+  const lessonsBlock =
+    lessons.length > 0
+      ? `\n\nLESSONS (your permanent memory — apply these):\n${lessons
+          .map((l) => `- [${l.id.slice(0, 8)}|${l.category}] ${l.lesson}`)
+          .join("\n")}`
+      : ""
+
   try {
     const { text } = await generateText({
-      model: getModel("standard"), // jarvis.chat — orchestration loop
+      model: getModel("heavy"), // jarvis.chat — orchestrator loop: multi-tool planning over the whole OS
       system: JARVIS_SYSTEM.replace(
         "{{TODAY}}",
         new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "full" }),
-      ),
+      ).replace("{{LESSONS}}", lessonsBlock),
       messages,
-      tools,
-      stopWhen: stepCountIs(6),
+      tools: { ...tools, ...orchestratorTools(userId) },
+      stopWhen: stepCountIs(10),
     })
     return { ok: true, text: text || "Done." }
   } catch (e) {
     console.error("[jarvis] chat error:", e)
+    // Surface actionable provider errors instead of a generic message.
+    const msg = e instanceof Error ? e.message : String(e)
+    if (msg.includes("credit card") || msg.includes("customer_verification_required")) {
+      return {
+        ok: false,
+        text: "The AI Gateway needs a valid credit card on your Vercel account before it will serve requests (unlocks free credits — you won't be charged without opting in). Add one at vercel.com → your team → AI, or set OPENROUTER_API_KEY to bypass the gateway entirely.",
+      }
+    }
+    if (msg.includes("401") || msg.toLowerCase().includes("unauthorized") || msg.toLowerCase().includes("api key")) {
+      return { ok: false, text: "LLM provider rejected the request (auth). Check OPENROUTER_API_KEY / gateway configuration in project env vars." }
+    }
     return { ok: false, text: "Jarvis hit an error. Check that an LLM provider is configured." }
   }
 }

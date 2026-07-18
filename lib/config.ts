@@ -152,3 +152,33 @@ export const GENERAL_DEFAULTS: GeneralConfig = {
   telegramMirror: true,
   notifyInApp: true,
 }
+
+// --- Agent instruction overrides (set by Jarvis or the Settings UI) -----------
+// Stored in app_config under key "agent_overrides" as { [agentKey]: directive }.
+// Each agent reads its override at runtime and appends it to its system prompt
+// as OPERATOR DIRECTIVES — this is how "Jarvis, make my LinkedIn posts punchier"
+// permanently changes the LinkedIn agent's behavior without a redeploy.
+
+export const AGENT_KEYS = {
+  linkedin_post: "LinkedIn post ghost-writer (drafting style, tone, structure)",
+  youtube_script: "YouTube script composer (scripting style, pacing, hooks)",
+  leadgen_qualify: "Lead-gen qualifier (what makes a good/bad prospect)",
+  career_outreach: "Career outreach message drafter (recruiter DMs, emails)",
+  ads_creative: "Ad creative concept generator (angles, formats)",
+} as const
+
+export type AgentKey = keyof typeof AGENT_KEYS
+
+export type AgentOverrides = Partial<Record<AgentKey, string>>
+
+/** Fetch the operator directive for one agent. Empty string when unset. */
+export async function getAgentOverride(userId: string, agent: AgentKey): Promise<string> {
+  const overrides = await getConfig<AgentOverrides>(userId, "agent_overrides", {})
+  return (overrides[agent] ?? "").trim()
+}
+
+/** Format an override for appending to a system prompt (empty-safe). */
+export function directiveBlock(override: string): string {
+  if (!override) return ""
+  return `\n\nOPERATOR DIRECTIVES (set by the operator via Jarvis — follow these strictly, they take precedence over stylistic defaults above, but NEVER override safety or fabrication rules):\n${override}`
+}

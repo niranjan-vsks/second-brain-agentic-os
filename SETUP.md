@@ -268,6 +268,21 @@ The **Money** tab tracks your payment instruments and autopays with a zero-crede
 
 ---
 
+## Operating Jarvis (god-mode orchestrator)
+
+Jarvis is the central brain — just prompt it in plain English. Beyond answering questions about your data, it can now:
+
+- **"What's going on?"** — live snapshot of every subsystem (jobs, funnel, prospects, autopays, configs, recent runs, its own recent actions).
+- **"Change the lead-gen minimum score to 70"** — reads/writes agent settings (lead-gen thresholds, ICP, toggles, general prefs, Meta Ads seam).
+- **"Make my LinkedIn posts punchier"** — sets permanent operator directives on any agent (LinkedIn ghost-writer, YouTube scripter, lead-gen qualifier, career outreach, ad creatives). Applies to all future runs.
+- **"Here's my Tavily key: tvly-xxx, configure it"** — stores keys AES-encrypted in the vault. It never echoes keys back.
+- **"Run lead-gen discovery now"** / **"Run an ATS scan"** — triggers workflows on demand.
+- **Self-improvement**: correct Jarvis once and it saves a lesson to permanent memory (injected into every future chat). Tell it "forget that" to remove one. Every mutation it makes is audited in `jarvis_actions`.
+
+What it deliberately cannot do: change model tiers (env-only by design), cancel bank mandates directly, or auto-post to LinkedIn.
+
+---
+
 ## Operating the Settings Hub (central configuration)
 
 Click the **gear icon** in the top navbar. Six sections:

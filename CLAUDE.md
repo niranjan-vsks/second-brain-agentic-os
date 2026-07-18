@@ -4,7 +4,7 @@
 
 ---
 
-## 0. CURRENT STATUS — START HERE (last updated: Settings Hub + Lead-Gen Agent + premium shell build)
+## 0. CURRENT STATUS — START HERE (last updated: Jarvis god-mode orchestrator build)
 
 **App shell:** premium dark "mission control" theme with a top navbar and grouped dropdown navigation — Career Ops (FDE Prep, Career Intelligence) · Business Ops (Freelance Funnel, LinkedIn OS, YouTube Studio) · Life Ops (Money OS) · Jarvis (direct button) · Settings Hub (gear icon). The old flat 8-tab row is gone; sections render inside the same `components/dashboard.tsx` state machine (`SectionKey`).
 
@@ -17,7 +17,7 @@
 | Career Intelligence | Fully live; scanner cron runs 4-hourly; FDE Master resume loaded; owner settings seeded | Search provider + browser worker optional (§10-style seams) |
 | Tiered model routing | Fully live (light/standard/heavy, all call sites annotated) | Optional per-tier overrides: `GATEWAY_MODEL_{LIGHT,STANDARD,HEAVY}` |
 | Settings Hub (gear icon) | Fully live: General, Model Routing (live tier view), Connections, API Key Vault (AES at rest), Agents (lead-gen config), Funnels (Meta Ads seam) | — |
-| Jarvis (tool-loop chat + voice) | Fully live | Calendar tools need Google OAuth (below) |
+| Jarvis (god-mode orchestrator: 13-tool loop, heavy tier) | Fully live — system status, settings read/write, agent directives, key vault writes, workflow triggers, self-improving lesson memory, full audit trail | Calendar tools need Google OAuth (below) |
 | Google Calendar | Code complete; needs `GOOGLE_CLIENT_ID/SECRET` + Calendar API enabled + `/api/auth/google-calendar/callback` registered as redirect URI | Same Google app as YouTube |
 | Money OS (autopay guardian) | Fully live; owner's 4 instruments seeded; reminder cron daily 8:00 IST | — |
 | Meta Ads funnel | Config seam only (Settings → Funnels): account ID + token stored, no campaign push yet (deliberate deferral) | `META_ADS_ACCESS_TOKEN` when built |
@@ -32,12 +32,13 @@
 7. Never port profile.yml/cv.md from the career-ops repo (stale AI-PM versions). The live master resume is the "FDE Master" row in the resumes table.
 8. BYO API keys: AES-encrypted in `api_keys` table, resolution order is ALWAYS stored key → env fallback (`resolveApiKey()` in `lib/config.ts`). Full key values are never returned to the client after saving — only lastFour.
 9. Lead-Gen Agent promotes prospects INTO the existing `leads` table — it never modifies the funnel pipeline schema or stages.
+10. Jarvis god-mode (`lib/jarvis-orchestrator.ts`): every mutating tool writes a `jarvis_actions` audit row; settings writes are shallow-merge against allowlisted config keys only; `set_agent_instructions` writes `app_config.agent_overrides` which the 5 agents (linkedin_post, youtube_script, leadgen_qualify, career_outreach, ads_creative) append via `directiveBlock()` — directives can never override safety/fabrication rules; `store_api_key` reuses the AES vault and never echoes keys; `jarvis_lessons` (active only) are injected into every Jarvis system prompt for self-improvement. Model tiers stay env-controlled — Jarvis cannot change them from chat.
 
 **Owner context you must know:** owner account = `nakri981@gmail.com`; comp guardrails ₹30–50L floor / ₹75L+ stretch (domestic), $5–7k/mo floor (international remote); FDE-first role families (fde, genai_arch, solutions, ai_pm); accounts tracked in Money OS: HDFC Debit, Tata Neu Infinity HDFC CC, Kotak 811 Debit, SBI Debit (Skydo planned for international freelancing).
 
 **Deferred / open work (intentional):** §8 LinkedIn deferred list · §10 YouTube stub activation + PRD §13 deferrals · WealthOS (separate app, separate chat) is NOT part of this repo. No other known bugs or half-finished work at handoff time.
 
-**Docs map:** this file (architecture + invariants) · `SETUP.md` (operator's usage guide) · `setup.sql` (full DDL, 44 tables, already applied — never re-run against prod) · `.env.example` (every env var, annotated).
+**Docs map:** this file (architecture + invariants) · `SETUP.md` (operator's usage guide) · `setup.sql` (full DDL, 46 tables, already applied — never re-run against prod) · `.env.example` (every env var, annotated).
 
 ---
 
@@ -83,7 +84,7 @@ The stated meta-goal: production-ready quality, consistency on weaker models, sc
   - `BUILD_TYPES` — rag, voice, mcp, automation, custom
   - `STAGE_PLAYBOOKS` — per-stage SOP checklist items (auto-copied into a deal's checklist when it enters a stage)
   - `ARTIFACT_TEMPLATES` — markdown templates: proposal, discovery doc, test plan, handoff doc
-  - `SYLLABUS_TRACKS` + `SYLLABUS_SEED` — 5 tracks, 25 seeded FDE prep topics with priorities
+  - `SYLLABUS_TRACKS` + `SYLLABUS_SEED` �� 5 tracks, 25 seeded FDE prep topics with priorities
   - `DRILL_SEED` — 10 seeded FDE interview practice questions
 - `lib/prd.ts` — `RESEARCH_AGENT_PRD`: a molecular-detail PRD for a "Deep Harvester" research agent (see §6). This is content, not running code.
 - `lib/seed.ts` — server-only first-login auto-seed (syllabus topics + drills per user).

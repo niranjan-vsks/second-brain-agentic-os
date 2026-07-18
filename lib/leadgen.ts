@@ -20,7 +20,14 @@ import { db } from "@/lib/db"
 import { leadgenProspects, leadgenRuns, leads } from "@/lib/db/schema"
 import { and, eq } from "drizzle-orm"
 import { getModel } from "@/lib/llm"
-import { getSecret, getConfig, LEADGEN_DEFAULTS, type LeadgenConfig } from "@/lib/config"
+import {
+  getSecret,
+  getConfig,
+  getAgentOverride,
+  directiveBlock,
+  LEADGEN_DEFAULTS,
+  type LeadgenConfig,
+} from "@/lib/config"
 
 export interface DiscoveredBusiness {
   businessName: string
@@ -137,6 +144,7 @@ async function qualifyBatch(
   businesses: DiscoveredBusiness[],
   source: string,
   icpNotes: string,
+  operatorDirective = "", // Jarvis-set override for what makes a good/bad prospect
 ): Promise<Qualification[]> {
   const prompt = `Source mode: ${source}\n\nOperator ICP notes: ${icpNotes}\n\nBusinesses:\n${JSON.stringify(
     businesses.map((b) => ({
@@ -165,10 +173,12 @@ async function qualifyBatch(
     }
   }
 
+  const system = QUALIFIER_PROMPT + directiveBlock(operatorDirective)
+
   // standard tier with one manual escalation to heavy on parse failure
   const { text } = await generateText({
     model: getModel("standard"), // leadgen.qualify — structured scoring against ICP
-    system: QUALIFIER_PROMPT,
+    system,
     prompt,
   })
   const first = parse(text)
@@ -176,7 +186,7 @@ async function qualifyBatch(
 
   const { text: retry } = await generateText({
     model: getModel("heavy"), // leadgen.qualify escalation — retry on invalid JSON
-    system: QUALIFIER_PROMPT,
+    system,
     prompt,
   })
   const second = parse(retry)
@@ -248,8 +258,9 @@ export async function runLeadgenAgent(
       return { runId, found: 0, qualified: 0, message: `No new prospects for "${query}" — all known or filtered` }
     }
 
-    // Qualification
-    const quals = await qualifyBatch(fresh, source, config.icpNotes)
+    // Qualification (with any Jarvis-set operator directive)
+    const qualifyDirective = await getAgentOverride(userId, "leadgen_qualify")
+    const quals = await qualifyBatch(fresh, source, config.icpNotes, qualifyDirective)
     let qualified = 0
 
     for (let i = 0; i < fresh.length; i++) {

@@ -658,6 +658,30 @@ export const leadgenRuns = pgTable("leadgen_runs", {
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
+// --- Jarvis orchestrator (god-mode) -------------------------------------------
+// jarvis_actions: audit log of every mutating action Jarvis performs.
+// jarvis_lessons: self-improvement memory — active lessons are injected into
+// Jarvis's system prompt on every chat, so corrections persist across sessions.
+
+export const jarvisActions = pgTable("jarvis_actions", {
+  id: text("id").primaryKey(),
+  userId: text("userId").notNull(),
+  tool: text("tool").notNull(), // which tool performed the mutation
+  summary: text("summary").notNull().default(""),
+  payload: jsonb("payload").notNull().default({}),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
+export const jarvisLessons = pgTable("jarvis_lessons", {
+  id: text("id").primaryKey(),
+  userId: text("userId").notNull(),
+  category: text("category").notNull().default("general"), // general | linkedin | youtube | leadgen | career | money
+  lesson: text("lesson").notNull(),
+  source: text("source").notNull().default("user_feedback"), // user_feedback | self_reflection
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
 export const autopays = pgTable("autopays", {
   id: text("id").primaryKey(),
   userId: text("userId").notNull(),
