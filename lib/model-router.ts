@@ -30,7 +30,6 @@ export const TASK_TIERS = {
 
   // ---- standard: drafting prose / SQL generation --------------------------
   "os_chat.text_to_sql": "standard",
-  "os_chat.jarvis": "standard", // tool-loop conductor (calendar, autopay, SQL)
   "career.outreach": "standard",
   "career.apply_assist": "standard",
   "linkedin.compose_post": "standard",
@@ -39,6 +38,7 @@ export const TASK_TIERS = {
   "youtube.premise": "standard",
 
   // ---- heavy: multi-constraint reasoning ----------------------------------
+  "os_chat.jarvis": "heavy", // god-mode orchestrator: 13-tool planning loop over the whole OS
   "career.evaluate": "heavy", // 6-block report + rubric + legitimacy tiers
   "career.tailor_resume": "heavy", // never-fabricate constitution
   "career.deep_research": "heavy",
