@@ -8,6 +8,7 @@ import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
 import { generateText } from "ai"
 import { getModel } from "@/lib/llm"
+import { getAgentOverride, directiveBlock } from "@/lib/config"
 import { isHiggsfieldConfigured, submitGeneration } from "@/lib/higgsfield"
 import { randomUUID } from "crypto"
 
@@ -45,10 +46,12 @@ export async function generateAdCreative(input: {
       "a customer testimonial video using social proof (credibility lead, transformation arc): before state, discovery, transformation, recommendation",
   }[input.creativeType]
 
+  const override = await getAgentOverride(userId, "ads_creative") // Jarvis-set operator directives
+
   try {
     const { text } = await generateText({
       model: getModel("standard"), // ads.creative — structured drafting
-      system: `You are an ad creative script composer. Write ${typeGuidance}. Output STRICT JSON: {"premise": "...", "script": "...", "videoPrompt": "single text-to-video generation prompt, max 900 chars"}. JSON only, no fences.`,
+      system: `You are an ad creative script composer. Write ${typeGuidance}. Output STRICT JSON: {"premise": "...", "script": "...", "videoPrompt": "single text-to-video generation prompt, max 900 chars"}. JSON only, no fences.${directiveBlock(override)}`,
       prompt: `Client brief: ${input.brief}`,
     })
     const cleaned = text.replace(/^```(json)?/m, "").replace(/```$/m, "").trim()

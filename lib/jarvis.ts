@@ -216,6 +216,17 @@ export async function jarvisChat(
     return { ok: true, text: text || "Done." }
   } catch (e) {
     console.error("[jarvis] chat error:", e)
+    // Surface actionable provider errors instead of a generic message.
+    const msg = e instanceof Error ? e.message : String(e)
+    if (msg.includes("credit card") || msg.includes("customer_verification_required")) {
+      return {
+        ok: false,
+        text: "The AI Gateway needs a valid credit card on your Vercel account before it will serve requests (unlocks free credits — you won't be charged without opting in). Add one at vercel.com → your team → AI, or set OPENROUTER_API_KEY to bypass the gateway entirely.",
+      }
+    }
+    if (msg.includes("401") || msg.toLowerCase().includes("unauthorized") || msg.toLowerCase().includes("api key")) {
+      return { ok: false, text: "LLM provider rejected the request (auth). Check OPENROUTER_API_KEY / gateway configuration in project env vars." }
+    }
     return { ok: false, text: "Jarvis hit an error. Check that an LLM provider is configured." }
   }
 }

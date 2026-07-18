@@ -691,9 +691,39 @@ CREATE TABLE IF NOT EXISTS "leadgen_runs" (
 
 
 -- =============================================================================
--- Done. 44 tables created.
+-- Jarvis god-mode orchestrator (audit log + self-improvement memory)
+-- =============================================================================
+
+-- Every mutating action Jarvis performs (settings writes, directives, key
+-- stores, workflow triggers, lesson saves) is recorded here.
+CREATE TABLE IF NOT EXISTS "jarvis_actions" (
+  "id" text PRIMARY KEY,
+  "userId" text NOT NULL,
+  "tool" text NOT NULL,
+  "summary" text NOT NULL DEFAULT '',
+  "payload" jsonb NOT NULL DEFAULT '{}',
+  "createdAt" timestamp NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_jarvis_actions_user ON "jarvis_actions" ("userId", "createdAt" DESC);
+
+-- Jarvis's permanent memory: active lessons are injected into its system
+-- prompt on every chat, so corrections persist across sessions.
+CREATE TABLE IF NOT EXISTS "jarvis_lessons" (
+  "id" text PRIMARY KEY,
+  "userId" text NOT NULL,
+  "category" text NOT NULL DEFAULT 'general',
+  "lesson" text NOT NULL,
+  "source" text NOT NULL DEFAULT 'user_feedback' CHECK ("source" IN ('user_feedback','self_reflection')),
+  "active" boolean NOT NULL DEFAULT true,
+  "createdAt" timestamp NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_jarvis_lessons_user ON "jarvis_lessons" ("userId") WHERE "active" = true;
+
+-- =============================================================================
+-- Done. 46 tables created.
 -- Breakdown: 4 Better Auth + 5 Freelance Funnel + 4 FDE Prep + 7 LinkedIn OS
 --          + 11 YouTube Pipeline / Ad Creative / Chat / Edits
 --          + 12 Career Intelligence + 3 Jarvis Connections / Money OS
 --          + 4 Settings Hub / Lead-Gen Agent
+--          + 2 Jarvis Orchestrator (jarvis_actions audit, jarvis_lessons memory)
 -- =============================================================================

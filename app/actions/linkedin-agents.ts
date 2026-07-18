@@ -17,6 +17,7 @@ import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
 
 import { getModel } from "@/lib/llm"
+import { getAgentOverride, directiveBlock } from "@/lib/config"
 
 // linkedin.compose_post / linkedin.tweak_post — prose drafting, standard tier.
 // (Previously hardcoded to a flagship model; now routed through the tiered seam.)
@@ -83,6 +84,7 @@ export async function composeDraft(input: {
 
   const styleCtx = await getStyleContext(userId)
   const lengthRule = input.longForm ? "Write long-form (400-600 words)." : "Target 150-220 words."
+  const override = await getAgentOverride(userId, "linkedin_post") // Jarvis-set operator directives
 
   const { text } = await generateText({
     model: MODEL,
@@ -90,7 +92,7 @@ export async function composeDraft(input: {
 
 ${claimStatusGuard(input.claimStatus)}${styleCtx}
 
-Output ONLY the post text, nothing else.`,
+Output ONLY the post text, nothing else.${directiveBlock(override)}`,
     prompt: topicContext,
   })
 
