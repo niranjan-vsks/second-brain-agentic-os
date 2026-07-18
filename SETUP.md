@@ -268,6 +268,29 @@ The **Money** tab tracks your payment instruments and autopays with a zero-crede
 
 ---
 
+## Operating the Settings Hub (central configuration)
+
+Click the **gear icon** in the top navbar. Six sections:
+
+1. **General** — display name, timezone, notification preferences.
+2. **Model Routing** — live read-only view of which model tier (light/standard/heavy) each agent task uses, plus the exact env var names to override any tier. Models are changed via env vars (v0: settings menu → Vars; Vercel: project → Settings → Environment Variables), not the UI — deliberate, so a mis-click can't brick your agents.
+3. **Connections** — status of Google/YouTube, Google Calendar, Telegram, and MCPs. Note: Higgsfield MCP is connected at the v0 chat level (prompt form → Tools), not inside the app.
+4. **API Keys** — bring your own keys (OpenRouter, Tavily, Brave, Serper, Google Maps, Meta Ads). Keys are AES-encrypted at rest; only the last 4 characters are ever shown after saving. Resolution order everywhere: stored key first, env var fallback.
+5. **Agents** — configure the Lead-Gen Agent: target business categories, locations, minimum qualification score, daily prospect cap, and the auto-run toggle for the daily cron.
+6. **Funnels** — Meta Ads seam: store your ad account ID + access token now; campaign automation is a future build (config-only today, clearly labeled).
+
+## Operating the Lead-Gen Agent (Freelance Funnel)
+
+Freelance Funnel → **Lead-Gen Agent** sub-tab. The pipeline is discover → AI-qualify → review → promote:
+
+1. **Configure** your ICP in Settings → Agents (or use the defaults: local businesses in your area).
+2. **Run discovery** — two sources: *Maps (no website)* finds local businesses without websites via Google Places (needs `GOOGLE_MAPS_API_KEY` or a stored Google Maps key), and *AI upgrade* finds businesses with outdated web presence via web search (needs a Tavily/Brave/Serper key).
+3. **AI qualification** scores each prospect 0–100 against your ICP with a rationale and suggested pitch angle. Prospects at/above your min score become `qualified`.
+4. **Review and promote** — promoting inserts the prospect into your normal leads pipeline (source-tagged); reject the rest. The agent never touches your funnel stages.
+5. **Auto-run**: enable in Settings → Agents to run discovery daily at 4:00 UTC. Every run (manual or cron) is logged in the run history at the bottom of the panel.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Fix |
@@ -306,6 +329,9 @@ The **Money** tab tracks your payment instruments and autopays with a zero-crede
 | `SEARCH_PROVIDER` / `SEARCH_API_KEY` | Career deep-research auto-execution | tavily \| brave \| serper \| crawl4ai; provider dashboard |
 | `CRAWL4AI_BASE_URL` | crawl4ai search/crawl provider | Your self-hosted crawl4ai instance URL |
 | `BROWSER_WORKER_URL` / `BROWSER_WORKER_SECRET` | Career PDF render + portal snapshots | Your browser-automation worker service |
+| `GOOGLE_MAPS_API_KEY` | Lead-Gen Agent maps discovery | Google Cloud Console → enable Places API (or store in Settings → API Keys) |
+| `META_ADS_ACCESS_TOKEN` | Meta Ads funnel seam (config-only today) | Meta Business → system user token (or store in Settings → API Keys) |
+| `GATEWAY_MODEL_LIGHT/STANDARD/HEAVY` | Per-tier model overrides | Any valid AI Gateway model ID (see Settings → Model Routing for tier map) |
 | `CRON_SECRET` | Cron auth (on Vercel) | `openssl rand -base64 32` |
 
 See `.env.example` for the annotated full list. Every pipeline variable above is optional — the app runs in stub mode without them and each one activates its subsystem with no code changes.
