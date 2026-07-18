@@ -38,7 +38,7 @@
 
 **Deferred / open work (intentional):** §8 LinkedIn deferred list · §10 YouTube stub activation + PRD §13 deferrals · WealthOS (separate app, separate chat) is NOT part of this repo. No other known bugs or half-finished work at handoff time.
 
-**Docs map:** this file (architecture + invariants) · `SETUP.md` (operator's usage guide) · `setup.sql` (full DDL, 44 tables, already applied — never re-run against prod) · `.env.example` (every env var, annotated).
+**Docs map:** this file (architecture + invariants) · `SETUP.md` (operator's usage guide) · `setup.sql` (full DDL, 46 tables, already applied — never re-run against prod) · `.env.example` (every env var, annotated).
 
 ---
 
@@ -84,7 +84,7 @@ The stated meta-goal: production-ready quality, consistency on weaker models, sc
   - `BUILD_TYPES` — rag, voice, mcp, automation, custom
   - `STAGE_PLAYBOOKS` — per-stage SOP checklist items (auto-copied into a deal's checklist when it enters a stage)
   - `ARTIFACT_TEMPLATES` — markdown templates: proposal, discovery doc, test plan, handoff doc
-  - `SYLLABUS_TRACKS` + `SYLLABUS_SEED` — 5 tracks, 25 seeded FDE prep topics with priorities
+  - `SYLLABUS_TRACKS` + `SYLLABUS_SEED` �� 5 tracks, 25 seeded FDE prep topics with priorities
   - `DRILL_SEED` — 10 seeded FDE interview practice questions
 - `lib/prd.ts` — `RESEARCH_AGENT_PRD`: a molecular-detail PRD for a "Deep Harvester" research agent (see §6). This is content, not running code.
 - `lib/seed.ts` — server-only first-login auto-seed (syllabus topics + drills per user).
