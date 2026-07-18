@@ -38,7 +38,9 @@
 
 **Deferred / open work (intentional):** §8 LinkedIn deferred list · §10 YouTube stub activation + PRD §13 deferrals · WealthOS (separate app, separate chat) is NOT part of this repo. No other known bugs or half-finished work at handoff time.
 
-**Docs map:** this file (architecture + invariants) · `SETUP.md` (operator's usage guide) · `setup.sql` (full DDL, 46 tables, already applied — never re-run against prod) · `.env.example` (every env var, annotated).
+**Docs map:** this file (architecture + invariants) · `SETUP.md` (operator's usage guide) · `drizzle/` (versioned migrations, source of truth for the schema — auto-applied by `scripts/migrate.mjs` on every `pnpm build`/deploy; `setup.sql` is kept only as historical reference, don't re-run it) · `.env.example` (every env var, annotated).
+
+**Schema changes now go through drizzle-kit, not hand-edited SQL:** edit `lib/db/schema.ts`, run `pnpm db:generate` to write a new versioned migration into `drizzle/`, commit it. Never edit files already in `drizzle/` after they're committed — generate a new one instead.
 
 ---
 

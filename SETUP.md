@@ -39,17 +39,26 @@ cd Second-brain-os
 
 ---
 
-## Step 3 — Run the database schema
+## Step 3 — Database schema (now automatic)
 
-1. In the Neon dashboard, go to the **SQL Editor** tab (left sidebar).
-2. Open `setup.sql` from the root of this repo.
-3. Copy the **entire contents** and paste into the Neon SQL Editor.
-4. Click **Run**.
-5. You should see `14 statements executed successfully` (or similar).
-6. Verify by clicking **Tables** in the sidebar — you should see all 14 tables.
+Migrations run themselves. `pnpm build` runs `scripts/migrate.mjs` first, which
+applies any pending files in `./drizzle` against `DATABASE_URL` — this happens
+on every Vercel deploy too, so the live DB can never drift behind the code
+again. Nothing to do here for a fresh setup: just make sure `DATABASE_URL` is
+set before your first `pnpm build` / deploy.
 
-> The file uses `CREATE TABLE IF NOT EXISTS` on every statement, so it is
-> safe to run more than once if anything goes wrong.
+`setup.sql` is the original hand-run DDL and is kept only as a historical
+reference — don't paste it into the Neon SQL Editor anymore, the drizzle
+migrations in `./drizzle` are the source of truth now.
+
+**Changing the schema going forward:** edit `lib/db/schema.ts`, run
+`pnpm db:generate` (writes a new versioned file into `./drizzle`), commit it,
+push — it applies itself on the next deploy.
+
+**Manual one-off run** (e.g. to fix a DB without redeploying):
+```bash
+node scripts/migrate.mjs
+```
 
 ---
 
@@ -312,7 +321,7 @@ Freelance Funnel → **Lead-Gen Agent** sub-tab. The pipeline is discover → AI
 |---|---|
 | `Invalid origin` on sign up | You are accessing from a non-localhost URL. Add the origin to `trustedOrigins` in `lib/auth.ts`. |
 | `BETTER_AUTH_SECRET not set` | The env var is missing. Check `.env.local` and restart the dev server. |
-| Tables not found on first load | You forgot Step 3. Run `setup.sql` in the Neon SQL Editor. |
+| Tables not found / 500s querying a specific table | Migrations haven't run against this DB yet. Run `node scripts/migrate.mjs` manually (with `DATABASE_URL` set), or just redeploy — it runs automatically as part of `pnpm build`. |
 | AI Composer returns 402/payment error | Add a card to your Vercel account at vercel.com → Settings → Billing. The AI Gateway requires billing to be enabled even for free-tier usage. |
 | `Cannot find module 'pg'` | Run `pnpm install` again. The `pg` driver must be installed. |
 | Session lost on page reload (localhost) | Rare; confirm `NODE_ENV=development` is set. The auth config applies `sameSite: none, secure: true` cookies in dev for iframe compatibility. |
