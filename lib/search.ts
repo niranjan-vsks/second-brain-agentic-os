@@ -1,9 +1,13 @@
-// Provider-agnostic web search seam (Task 0.3 decision). Activates via env:
-//   SEARCH_PROVIDER = tavily | brave | serper | crawl4ai
-//   SEARCH_API_KEY  = provider key (not needed for crawl4ai)
-//   CRAWL4AI_URL    = base URL of a self-hosted crawl4ai instance (docker deploy)
+// Provider-agnostic web search seam (Task 0.3 decision). Resolution order:
+//   1. SEARCH_PROVIDER env (explicit pin) + SEARCH_API_KEY env or the matching
+//      stored key from Settings → API Keys
+//   2. Auto-detect: first of tavily / brave / serper with a stored key
+//      (Settings → API Keys — no env var needed for the common case)
+//   3. crawl4ai via CRAWL4AI_URL env (page fetching only, not keyword search)
 // No provider configured => isSearchConfigured() false; callers fall back
 // (e.g. deep mode falls back to prompt-generator per Task 0.4 decision).
+
+import { getSecret } from "@/lib/config"
 
 export interface SearchResult {
   title: string
@@ -11,16 +15,32 @@ export interface SearchResult {
   snippet: string
 }
 
-export function isSearchConfigured(): boolean {
-  const p = process.env.SEARCH_PROVIDER
-  if (!p) return false
-  if (p === "crawl4ai") return !!process.env.CRAWL4AI_URL
-  return !!process.env.SEARCH_API_KEY
+const AUTO_DETECT_ORDER = ["tavily", "brave", "serper"] as const
+
+async function resolveSearchProvider(userId: string): Promise<{ provider: string; key: string } | null> {
+  const pinned = process.env.SEARCH_PROVIDER
+  if (pinned && pinned !== "crawl4ai") {
+    const key = process.env.SEARCH_API_KEY || (await getSecret(userId, pinned)) || ""
+    if (key) return { provider: pinned, key }
+  }
+  for (const provider of AUTO_DETECT_ORDER) {
+    const key = await getSecret(userId, provider)
+    if (key) return { provider, key }
+  }
+  return null
 }
 
-export async function webSearch(query: string, maxResults = 8): Promise<SearchResult[]> {
-  const provider = process.env.SEARCH_PROVIDER
-  const key = process.env.SEARCH_API_KEY ?? ""
+export async function isSearchConfigured(userId: string): Promise<boolean> {
+  if (await resolveSearchProvider(userId)) return true
+  return process.env.SEARCH_PROVIDER === "crawl4ai" && !!process.env.CRAWL4AI_URL
+}
+
+export async function webSearch(userId: string, query: string, maxResults = 8): Promise<SearchResult[]> {
+  const resolved = await resolveSearchProvider(userId)
+  if (!resolved) {
+    throw new Error("No search provider configured — add a Tavily, Brave, or Serper key in Settings → API Keys")
+  }
+  const { provider, key } = resolved
 
   if (provider === "tavily") {
     const res = await fetch("https://api.tavily.com/search", {

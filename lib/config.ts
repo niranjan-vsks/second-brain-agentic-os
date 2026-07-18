@@ -57,6 +57,18 @@ export const KEY_PROVIDERS: Record<
     docsUrl: "https://developers.facebook.com/tools/explorer",
     purpose: "Meta Ads funnel seam — campaign sync (stub until connected)",
   },
+  telegram_bot: {
+    label: "Telegram Bot",
+    envVar: "TELEGRAM_BOT_TOKEN",
+    docsUrl: "https://core.telegram.org/bots#botfather",
+    purpose: "Notification mirror + chat webhook — token from @BotFather",
+  },
+  browser_worker: {
+    label: "Browser Worker",
+    envVar: "BROWSER_WORKER_SECRET",
+    docsUrl: "https://vercel.com",
+    purpose: "Bearer secret for your self-hosted browser-automation worker (PDF render, portal snapshots)",
+  },
 }
 
 /** Resolve a secret: user's stored DB key first, env var fallback. Null if neither. */
@@ -151,6 +163,18 @@ export const GENERAL_DEFAULTS: GeneralConfig = {
   timezone: "Asia/Kolkata",
   telegramMirror: true,
   notifyInApp: true,
+}
+
+export interface ConnectionsConfig {
+  /** Numeric Telegram user id allowed to talk to the bot (from @userinfobot) */
+  telegramAllowedUserId: string
+  /** Base URL of a self-hosted browser-automation worker (PDF render, portal snapshots) */
+  browserWorkerUrl: string
+}
+
+export const CONNECTIONS_DEFAULTS: ConnectionsConfig = {
+  telegramAllowedUserId: "",
+  browserWorkerUrl: "",
 }
 
 // --- Agent instruction overrides (set by Jarvis or the Settings UI) -----------

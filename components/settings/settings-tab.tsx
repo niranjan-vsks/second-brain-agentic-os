@@ -96,7 +96,9 @@ export function SettingsTab() {
       <div className="min-w-0 flex-1">
         {section === "general" && <GeneralSection data={data} onSaved={() => mutate()} />}
         {section === "routing" && <RoutingSection data={data} />}
-        {section === "connections" && <ConnectionsSection data={data} />}
+        {section === "connections" && (
+          <ConnectionsSection data={data} onSaved={() => mutate()} goToKeys={() => setSection("keys")} />
+        )}
         {section === "keys" && <KeysSection data={data} onSaved={() => mutate()} />}
         {section === "agents" && <AgentsSection data={data} onSaved={() => mutate()} />}
         {section === "funnels" && <FunnelsSection data={data} onSaved={() => mutate()} />}
@@ -241,64 +243,168 @@ function RoutingSection({ data }: { data: Snapshot }) {
 
 // --- Connections --------------------------------------------------------------------
 
-function ConnectionsSection({ data }: { data: Snapshot }) {
+function ConnectionsSection({
+  data,
+  onSaved,
+  goToKeys,
+}: {
+  data: Snapshot
+  onSaved: () => void
+  goToKeys: () => void
+}) {
   const c = data.connections
-  const rows: { name: string; detail: string; ok: boolean; okLabel?: string; badLabel?: string }[] = [
-    {
-      name: "Google Calendar",
-      detail: "Jarvis scheduling tools. Connect from the Jarvis tab (requires Google OAuth env vars).",
-      ok: c.googleCalendar === "connected",
-      badLabel: c.googleCalendar === "not_connected" ? "Not connected" : c.googleCalendar,
-    },
-    {
-      name: "Telegram Bot",
-      detail: "Notification mirror + chat channel. Set TELEGRAM_BOT_TOKEN env var.",
-      ok: c.telegram,
-      badLabel: "No token",
-    },
-    {
-      name: "Search Provider",
-      detail: `Career deep-research + lead-gen discovery. ${c.searchProvider ? `Active: ${c.searchProvider}` : "Set SEARCH_PROVIDER env var or add a key under API Keys."}`,
-      ok: Boolean(c.searchProvider),
-      badLabel: "Not set",
-    },
-    {
-      name: "Browser Worker",
-      detail: "Portal automation for job applications. Set BROWSER_WORKER_URL env var.",
-      ok: c.browserWorker,
-      badLabel: "Not deployed",
-    },
-    {
-      name: "Cron Secret",
-      detail: "Protects the 7 scheduled agents (scanner, pollers, lead-gen, reminders).",
-      ok: c.cronSecret,
-      badLabel: "Not set",
-    },
-    {
-      name: "Encryption",
-      detail: "AES key for tokens + stored API keys (ENCRYPTION_KEY env var).",
-      ok: c.encryptionReady,
-      badLabel: "ENCRYPTION_KEY missing",
-    },
-  ]
+  const [form, setForm] = useState(data.connectionsForm)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  async function save() {
+    setSaving(true)
+    await saveConfigAction("connections", form as unknown as Record<string, unknown>)
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+    onSaved()
+  }
 
   return (
     <div className="flex flex-col gap-4">
       <Card className="surface-raised border-0">
         <CardHeader>
           <CardTitle>Connections</CardTitle>
-          <CardDescription>External services wired into the OS and their live status.</CardDescription>
+          <CardDescription>External services wired into the OS — connect or configure each one below.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          {rows.map((row) => (
-            <div key={row.name} className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium">{row.name}</p>
-                <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{row.detail}</p>
-              </div>
-              <StatusDot ok={row.ok} okLabel={row.okLabel ?? "Connected"} badLabel={row.badLabel ?? "Not set"} />
+          {/* Google Calendar — real OAuth, connect flow lives on the Jarvis tab */}
+          <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Google Calendar</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                Jarvis scheduling tools. Needs a Google Cloud OAuth app (GOOGLE_CLIENT_ID/SECRET env) — click Connect
+                on the Jarvis tab once that's set up.
+              </p>
             </div>
-          ))}
+            <div className="flex shrink-0 items-center gap-2">
+              <StatusDot
+                ok={c.googleCalendar === "connected"}
+                okLabel="Connected"
+                badLabel={c.googleCalendar === "not_connected" ? "Not connected" : c.googleCalendar}
+              />
+            </div>
+          </div>
+
+          {/* Telegram Bot — token via API Key Vault, allowed user id editable here */}
+          <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Telegram Bot</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                  Notification mirror + chat channel. Bot token lives in{" "}
+                  <button type="button" onClick={goToKeys} className="underline underline-offset-2 hover:text-foreground">
+                    API Keys
+                  </button>
+                  ; set the allowed Telegram user id below (from @userinfobot).
+                </p>
+              </div>
+              <StatusDot ok={c.telegram} okLabel="Token set" badLabel="No token" />
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <div className="flex flex-1 flex-col gap-1.5">
+                <Label htmlFor="telegramUserId" className="text-xs">
+                  Allowed Telegram user id
+                </Label>
+                <Input
+                  id="telegramUserId"
+                  placeholder="123456789"
+                  value={form.telegramAllowedUserId}
+                  onChange={(e) => setForm({ ...form, telegramAllowedUserId: e.target.value })}
+                />
+              </div>
+              <Button variant="secondary" onClick={goToKeys}>
+                Add bot token
+              </Button>
+            </div>
+          </div>
+
+          {/* Search Provider — auto-detected from stored keys, link to Keys */}
+          <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Search Provider</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                Career deep-research + lead-gen discovery.{" "}
+                {c.searchProvider ? (
+                  <>
+                    Active: <span className="font-mono text-foreground">{c.searchProvider}</span>
+                  </>
+                ) : (
+                  <>
+                    Add a{" "}
+                    <button type="button" onClick={goToKeys} className="underline underline-offset-2 hover:text-foreground">
+                      Tavily, Brave, or Serper key
+                    </button>{" "}
+                    — it activates automatically, no env var needed.
+                  </>
+                )}
+              </p>
+            </div>
+            <StatusDot ok={Boolean(c.searchProvider)} okLabel="Active" badLabel="Not set" />
+          </div>
+
+          {/* Browser Worker — URL editable here, secret via API Key Vault */}
+          <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Browser Worker</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                  Portal automation for job applications (PDF render, posting snapshots). Set your worker's URL below;
+                  its bearer secret lives in{" "}
+                  <button type="button" onClick={goToKeys} className="underline underline-offset-2 hover:text-foreground">
+                    API Keys
+                  </button>
+                  .
+                </p>
+              </div>
+              <StatusDot ok={c.browserWorker} okLabel="Configured" badLabel="Not deployed" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="browserWorkerUrl" className="text-xs">
+                Worker URL
+              </Label>
+              <Input
+                id="browserWorkerUrl"
+                placeholder="https://your-worker.example.com"
+                value={form.browserWorkerUrl}
+                onChange={(e) => setForm({ ...form, browserWorkerUrl: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Cron Secret</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                Protects the scheduled agents (scanner, lead-gen). Server-side only — set CRON_SECRET in Vercel env vars.
+              </p>
+            </div>
+            <StatusDot ok={c.cronSecret} okLabel="Set" badLabel="Not set" />
+          </div>
+
+          <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Encryption</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                AES key for tokens + stored API keys. Server-side only — set ENCRYPTION_KEY in Vercel env vars (needed
+                before any key above can be saved).
+              </p>
+            </div>
+            <StatusDot ok={c.encryptionReady} okLabel="Ready" badLabel="ENCRYPTION_KEY missing" />
+          </div>
+
+          <div className="flex justify-end">
+            <Button onClick={save} disabled={saving}>
+              {saving ? <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden="true" /> : null}
+              {saved ? "Saved" : "Save connection settings"}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

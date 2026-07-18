@@ -12,7 +12,14 @@ import { db } from "@/lib/db"
 import { appConfig, apiKeys, connectedAccounts, youtubeChannels } from "@/lib/db/schema"
 import { and, eq } from "drizzle-orm"
 import { encrypt, isCryptoConfigured } from "@/lib/crypto"
-import { KEY_PROVIDERS, getConfig, LEADGEN_DEFAULTS, META_ADS_DEFAULTS, GENERAL_DEFAULTS } from "@/lib/config"
+import {
+  KEY_PROVIDERS,
+  getConfig,
+  LEADGEN_DEFAULTS,
+  META_ADS_DEFAULTS,
+  GENERAL_DEFAULTS,
+  CONNECTIONS_DEFAULTS,
+} from "@/lib/config"
 import { describeLlm } from "@/lib/llm"
 import { TASK_TIERS } from "@/lib/model-router"
 
@@ -26,7 +33,7 @@ async function getUserId(): Promise<string> {
 
 export async function saveConfigAction(key: string, value: Record<string, unknown>) {
   const userId = await getUserId()
-  const allowed = new Set(["leadgen", "funnels.meta_ads", "general"])
+  const allowed = new Set(["leadgen", "funnels.meta_ads", "general", "connections"])
   if (!allowed.has(key)) throw new Error("Unknown config key")
   const existing = await db
     .select()
@@ -48,10 +55,11 @@ export async function saveConfigAction(key: string, value: Record<string, unknow
 export async function getSettingsSnapshot() {
   const userId = await getUserId()
 
-  const [leadgen, metaAds, general, keyRows, calRows, ytRows] = await Promise.all([
+  const [leadgen, metaAds, general, connectionsForm, keyRows, calRows, ytRows] = await Promise.all([
     getConfig(userId, "leadgen", LEADGEN_DEFAULTS),
     getConfig(userId, "funnels.meta_ads", META_ADS_DEFAULTS),
     getConfig(userId, "general", GENERAL_DEFAULTS),
+    getConfig(userId, "connections", CONNECTIONS_DEFAULTS),
     db.select().from(apiKeys).where(eq(apiKeys.userId, userId)),
     db.select().from(connectedAccounts).where(eq(connectedAccounts.userId, userId)),
     db.select().from(youtubeChannels).where(eq(youtubeChannels.userId, userId)),
@@ -59,10 +67,19 @@ export async function getSettingsSnapshot() {
 
   const llm = describeLlm()
 
+  // Search provider: explicit env pin, else first of tavily/brave/serper with a stored key
+  const activeSearchProvider =
+    process.env.SEARCH_PROVIDER ||
+    (["tavily", "brave", "serper"] as const).find((p) => keyRows.some((k) => k.provider === p)) ||
+    ""
+  const telegramActive = Boolean(keyRows.some((k) => k.provider === "telegram_bot") || process.env.TELEGRAM_BOT_TOKEN)
+  const browserWorkerActive = Boolean(connectionsForm.browserWorkerUrl || process.env.BROWSER_WORKER_URL)
+
   return {
     leadgen,
     metaAds,
     general,
+    connectionsForm,
     // Masked key metadata only — never the key material
     keys: keyRows.map((k) => ({
       provider: k.provider,
@@ -81,10 +98,10 @@ export async function getSettingsSnapshot() {
     connections: {
       googleCalendar: calRows.find((c) => c.provider === "google_calendar")?.status ?? "not_connected",
       youtubeChannels: ytRows.map((c) => ({ name: c.channelName, status: c.status })),
-      telegram: Boolean(process.env.TELEGRAM_BOT_TOKEN),
+      telegram: telegramActive,
       cronSecret: Boolean(process.env.CRON_SECRET),
-      searchProvider: process.env.SEARCH_PROVIDER || "",
-      browserWorker: Boolean(process.env.BROWSER_WORKER_URL),
+      searchProvider: activeSearchProvider,
+      browserWorker: browserWorkerActive,
       encryptionReady: isCryptoConfigured(),
     },
     routing: {

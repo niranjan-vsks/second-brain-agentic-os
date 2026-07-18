@@ -118,9 +118,9 @@ export async function evaluateJob(jobId: string) {
 
   // Optional comp research (Block D) — only when a search provider is configured
   let compResearch = ""
-  if (isSearchConfigured()) {
+  if (await isSearchConfigured(userId)) {
     try {
-      const results = await webSearch(`${job.roleTitle} salary ${job.geography || "remote"} ${job.company} glassdoor levels.fyi`, 5)
+      const results = await webSearch(userId, `${job.roleTitle} salary ${job.geography || "remote"} ${job.company} glassdoor levels.fyi`, 5)
       compResearch = `COMP RESEARCH RESULTS:\n${results.map((r) => `- ${r.title} (${r.url}): ${r.snippet}`).join("\n")}`
     } catch {
       compResearch = ""
@@ -366,7 +366,7 @@ export async function deepResearch(company: string, jobId?: string) {
   const ctx = await getCandidateContext(userId)
   const candidateAngle = ctx.masterResume ? ctx.cvBlock.slice(0, 4000) : "Candidate profile not yet uploaded."
 
-  if (!isSearchConfigured()) {
+  if (!(await isSearchConfigured(userId))) {
     // Fallback: generate the paste-into-Perplexity prompt (original deep mode behavior)
     try {
       const { text } = await generateText({
@@ -396,7 +396,7 @@ export async function deepResearch(company: string, jobId?: string) {
       `${company} engineering blog culture tech stack`,
       `${company} competitors differentiation`,
     ]
-    const allResults = (await Promise.all(queries.map((q) => webSearch(q, 4).catch(() => [])))).flat()
+    const allResults = (await Promise.all(queries.map((q) => webSearch(userId, q, 4).catch(() => [])))).flat()
     const { text } = await generateText({
       model: getModel("heavy"), // career.deep_research — multi-source synthesis
       system: DEEP_RESEARCH_SYNTHESIS_PROMPT,
