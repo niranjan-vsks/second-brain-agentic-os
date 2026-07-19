@@ -9,6 +9,7 @@ import { revalidatePath } from "next/cache"
 import { generateText } from "ai"
 import { getModel } from "@/lib/llm"
 import { getAgentOverride, directiveBlock } from "@/lib/config"
+import { skillsBlockFor } from "@/lib/skills"
 import { isHiggsfieldConfigured, submitGeneration } from "@/lib/higgsfield"
 import { randomUUID } from "crypto"
 
@@ -47,11 +48,12 @@ export async function generateAdCreative(input: {
   }[input.creativeType]
 
   const override = await getAgentOverride(userId, "ads_creative") // Jarvis-set operator directives
+  const skillsCtx = await skillsBlockFor(userId, "ads_creative") // Arsenal skills
 
   try {
     const { text } = await generateText({
       model: getModel("standard"), // ads.creative — structured drafting
-      system: `You are an ad creative script composer. Write ${typeGuidance}. Output STRICT JSON: {"premise": "...", "script": "...", "videoPrompt": "single text-to-video generation prompt, max 900 chars"}. JSON only, no fences.${directiveBlock(override)}`,
+      system: `You are an ad creative script composer. Write ${typeGuidance}. Output STRICT JSON: {"premise": "...", "script": "...", "videoPrompt": "single text-to-video generation prompt, max 900 chars"}. JSON only, no fences.${directiveBlock(override)}${skillsCtx}`,
       prompt: `Client brief: ${input.brief}`,
     })
     const cleaned = text.replace(/^```(json)?/m, "").replace(/```$/m, "").trim()

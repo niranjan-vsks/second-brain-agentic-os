@@ -82,6 +82,18 @@ export const KEY_PROVIDERS: Record<
     docsUrl: "https://github.com/unclecode/crawl4ai",
     purpose: "Bearer key for your self-hosted crawl4ai instance (JD/page extraction) — optional, only if your instance requires auth",
   },
+  n8n: {
+    label: "n8n API Key",
+    envVar: "N8N_API_KEY",
+    docsUrl: "https://docs.n8n.io/api/authentication/",
+    purpose: "Runs imported automations on your n8n instance (URL in Connections). Create in n8n: Settings → n8n API",
+  },
+  setu: {
+    label: "Setu AA (read-only)",
+    envVar: "SETU_AA_CLIENT_SECRET",
+    docsUrl: "https://docs.setu.co/data/account-aggregator",
+    purpose: "Account Aggregator seam for read-only bank data sync into Money OS — requires Setu onboarding; stub until wired",
+  },
 }
 
 /**
@@ -213,6 +225,8 @@ export interface ConnectionsConfig {
   linkedinPersonUrn: string
   /** Base URL of a self-hosted crawl4ai instance (page fetch/extraction) */
   crawl4aiBaseUrl: string
+  /** Base URL of the n8n instance that runs imported automations */
+  n8nBaseUrl: string
 }
 
 export const CONNECTIONS_DEFAULTS: ConnectionsConfig = {
@@ -220,6 +234,7 @@ export const CONNECTIONS_DEFAULTS: ConnectionsConfig = {
   browserWorkerUrl: "",
   linkedinPersonUrn: "",
   crawl4aiBaseUrl: "",
+  n8nBaseUrl: "",
 }
 
 // --- Agent instruction overrides (set by Jarvis or the Settings UI) -----------

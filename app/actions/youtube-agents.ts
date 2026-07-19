@@ -9,6 +9,7 @@ import { revalidatePath } from "next/cache"
 import { generateText } from "ai"
 import { getModel } from "@/lib/llm"
 import { getAgentOverride, directiveBlock } from "@/lib/config"
+import { skillsBlockFor } from "@/lib/skills"
 import { isHiggsfieldConfigured, submitGeneration } from "@/lib/higgsfield"
 import { randomUUID } from "crypto"
 
@@ -35,6 +36,7 @@ export async function composeScript(projectId: string) {
 
   const [settings] = await db.select().from(pipelineSettings).where(eq(pipelineSettings.userId, userId)).limit(1)
   const override = await getAgentOverride(userId, "youtube_script") // Jarvis-set operator directives
+  const skillsCtx = await skillsBlockFor(userId, "youtube_script") // Arsenal skills
 
   try {
     const { text } = await generateText({
@@ -42,7 +44,7 @@ export async function composeScript(projectId: string) {
       system: `You are a YouTube script composer for: ${settings?.contentDomain || "general content"}.
 Tone/voice notes: ${settings?.toneVoiceNotes || "engaging, punchy, hook-first"}.
 Video format: ${project.videoFormat} (${project.videoFormat === "shorts" ? "15-60 seconds, vertical" : "3-15 minutes"}).
-Output STRICT JSON with keys: "premise" (one-sentence hook premise), "script" (full narration script), "shotBreakdown" (array of {shot, visualDescription, durationSeconds}). No markdown fences, JSON only.${directiveBlock(override)}`,
+Output STRICT JSON with keys: "premise" (one-sentence hook premise), "script" (full narration script), "shotBreakdown" (array of {shot, visualDescription, durationSeconds}). No markdown fences, JSON only.${directiveBlock(override)}${skillsCtx}`,
       prompt: `Topic: ${project.topic}`,
     })
 

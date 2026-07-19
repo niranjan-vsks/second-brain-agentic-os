@@ -26,6 +26,7 @@ import { revalidatePath } from "next/cache"
 import { generateText } from "ai"
 import { getModel } from "@/lib/llm"
 import { getAgentOverride, directiveBlock } from "@/lib/config"
+import { skillsBlockFor } from "@/lib/skills"
 import { randomUUID } from "crypto"
 import {
   EVALUATION_PROMPT,
@@ -318,11 +319,12 @@ export async function generateOutreach(input: {
   if (!job) throw new Error("Job not found")
   const ctx = await getCandidateContext(userId)
   const outreachOverride = await getAgentOverride(userId, "career_outreach") // Jarvis-set operator directives
+  const outreachSkills = await skillsBlockFor(userId, "career_outreach") // Arsenal skills
 
   try {
     const { text } = await generateText({
       model: getModel("standard"), // career.outreach — prose drafting
-      system: CONTACTO_PROMPT + directiveBlock(outreachOverride),
+      system: CONTACTO_PROMPT + directiveBlock(outreachOverride) + outreachSkills,
       prompt: `${ctx.cvBlock}\n\nJOB: ${job.roleTitle} @ ${job.company}\nJD EXCERPT: ${job.jobDescription.slice(0, 3000)}\n\nCONTACT: ${input.contactName} — type: ${input.contactRole}\nCONTEXT ABOUT THIS CONTACT: ${input.contactContext || "none provided"}`,
     })
     const parsed = parseJson<{ message: string; alternativeTargets: string }>(text)

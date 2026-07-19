@@ -37,7 +37,11 @@ export const TASK_TIERS = {
   "ads.creative": "standard",
   "youtube.premise": "standard",
 
+  // ---- standard: arsenal ---------------------------------------------------
+  "arsenal.skill_extract": "standard", // zip/md ingestion: name/description/tags/target-agent extraction
+
   // ---- heavy: multi-constraint reasoning ----------------------------------
+  "arsenal.analyze_automation": "heavy", // n8n workflow JSON → capability analysis + absorbable parts
   "os_chat.jarvis": "heavy", // god-mode orchestrator: 13-tool planning loop over the whole OS
   "career.evaluate": "heavy", // 6-block report + rubric + legitimacy tiers
   "career.tailor_resume": "heavy", // never-fabricate constitution

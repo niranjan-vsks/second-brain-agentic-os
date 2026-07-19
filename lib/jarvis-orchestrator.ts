@@ -3,7 +3,7 @@ import { tool } from "ai"
 import { z } from "zod"
 import { randomUUID } from "crypto"
 import { db, pool } from "@/lib/db"
-import { appConfig, apiKeys, jarvisActions, jarvisLessons, leadgenRuns } from "@/lib/db/schema"
+import { appConfig, apiKeys, jarvisActions, jarvisLessons, leadgenRuns, skills, automations } from "@/lib/db/schema"
 import { and, eq, desc } from "drizzle-orm"
 import {
   getConfig,
@@ -299,6 +299,143 @@ export function orchestratorTools(userId: string) {
           .where(and(eq(jarvisLessons.id, lessonId), eq(jarvisLessons.userId, userId)))
         await logAction(userId, "forget_lesson", `Forgot lesson ${lessonId}`, { lessonId })
         return { forgotten: lessonId }
+      },
+    }),
+
+    // --- Arsenal: skills ------------------------------------------------------
+
+    list_skills: tool({
+      description:
+        "List the operator's installed skills (Arsenal capability modules injected into agent prompts). Shows name, description, target agents, active flag. Use before adding/assigning skills.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const rows = await db
+          .select({
+            id: skills.id,
+            name: skills.name,
+            description: skills.description,
+            targetAgents: skills.targetAgents,
+            active: skills.active,
+            source: skills.source,
+          })
+          .from(skills)
+          .where(eq(skills.userId, userId))
+          .orderBy(desc(skills.updatedAt))
+          .limit(50)
+        return { skills: rows, availableAgents: Object.keys(AGENT_KEYS) }
+      },
+    }),
+
+    add_skill: tool({
+      description:
+        "Install a new skill into the Arsenal — a block of prompt-level expertise (rules, method, templates) that gets injected into the targeted agents' system prompts on every future run. Use when the operator teaches you a technique worth making permanent, or when you extract a capability from an analyzed automation.",
+      inputSchema: z.object({
+        name: z.string().min(3).max(120),
+        description: z.string().max(300),
+        content: z.string().min(40).max(20000).describe("The skill body: concrete rules/method, not vague advice"),
+        targetAgents: z
+          .string()
+          .describe(`Comma-separated agent keys from: ${Object.keys(AGENT_KEYS).join(", ")}. Empty = library-only.`),
+      }),
+      execute: async ({ name, description, content, targetAgents }) => {
+        const { upsertSkill, isAgentKey } = await import("@/lib/skills")
+        const cleanTargets = targetAgents
+          .split(",")
+          .map((a) => a.trim())
+          .filter(isAgentKey)
+          .join(",")
+        const { id, created } = await upsertSkill(
+          userId,
+          { name, description, content, tags: "jarvis", targetAgents: cleanTargets },
+          "jarvis",
+        )
+        await logAction(userId, "add_skill", `${created ? "Installed" : "Updated"} skill "${name}" → [${cleanTargets || "library"}]`, {
+          skillId: id,
+          targetAgents: cleanTargets,
+        })
+        return { skillId: id, created, targetAgents: cleanTargets, note: "Takes effect on the targeted agents' next run." }
+      },
+    }),
+
+    assign_skill: tool({
+      description:
+        "Retarget or toggle an existing skill: change which agents it injects into, or activate/deactivate it. Get IDs from list_skills.",
+      inputSchema: z.object({
+        skillId: z.string(),
+        targetAgents: z.string().optional().describe(`Comma-separated agent keys (${Object.keys(AGENT_KEYS).join(", ")}); omit to keep current`),
+        active: z.boolean().optional(),
+      }),
+      execute: async ({ skillId, targetAgents, active }) => {
+        const { isAgentKey } = await import("@/lib/skills")
+        const patch: Record<string, unknown> = { updatedAt: new Date() }
+        if (targetAgents !== undefined) {
+          patch.targetAgents = targetAgents
+            .split(",")
+            .map((a) => a.trim())
+            .filter(isAgentKey)
+            .join(",")
+        }
+        if (active !== undefined) patch.active = active
+        await db.update(skills).set(patch).where(and(eq(skills.id, skillId), eq(skills.userId, userId)))
+        await logAction(userId, "assign_skill", `Updated skill ${skillId}`, { skillId, targetAgents, active })
+        return { updated: skillId, ...patch }
+      },
+    }),
+
+    // --- Arsenal: automations -------------------------------------------------
+
+    list_automations: tool({
+      description:
+        "List imported automations (n8n workflows) with their status and analysis summary. Use before running or analyzing one.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const rows = await db
+          .select({
+            id: automations.id,
+            name: automations.name,
+            description: automations.description,
+            status: automations.status,
+            analysis: automations.analysis,
+          })
+          .from(automations)
+          .where(eq(automations.userId, userId))
+          .orderBy(desc(automations.updatedAt))
+          .limit(30)
+        const { isN8nConfigured } = await import("@/lib/n8n")
+        return {
+          automations: rows.map((r) => ({
+            ...r,
+            analysis: (r.analysis as { summary?: string })?.summary ?? "(not analyzed yet)",
+          })),
+          n8nConfigured: await isN8nConfigured(userId),
+        }
+      },
+    }),
+
+    analyze_automation: tool({
+      description:
+        "Deep-analyze an imported automation: what it does end-to-end, whether it's worth running whole, and which parts are absorbable into our agents as skills. Run this before recommending anything about an automation.",
+      inputSchema: z.object({ automationId: z.string() }),
+      execute: async ({ automationId }) => {
+        const { analyzeAutomation } = await import("@/app/actions/arsenal")
+        const result = await analyzeAutomation(automationId)
+        await logAction(userId, "analyze_automation", `Analyzed automation ${automationId}`, { automationId, ok: result.ok })
+        return result
+      },
+    }),
+
+    run_automation: tool({
+      description:
+        "Run an imported automation on the operator's connected n8n instance (deploys it there first if needed). Only invoke when the operator asks for it OR when the automation's analysis clearly shows running it would serve the operator's current request — say so when you do.",
+      inputSchema: z.object({ automationId: z.string() }),
+      execute: async ({ automationId }) => {
+        const { runAutomationAction } = await import("@/app/actions/arsenal")
+        const result = await runAutomationAction(automationId, "jarvis")
+        await logAction(userId, "run_automation", `Ran automation ${automationId}: ${result.ok ? "ok" : result.error}`, {
+          automationId,
+          ok: result.ok,
+        })
+        return result
       },
     }),
   }

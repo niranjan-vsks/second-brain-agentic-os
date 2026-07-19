@@ -28,6 +28,7 @@ import {
   LEADGEN_DEFAULTS,
   type LeadgenConfig,
 } from "@/lib/config"
+import { skillsBlockFor } from "@/lib/skills"
 
 export interface DiscoveredBusiness {
   businessName: string
@@ -145,6 +146,7 @@ async function qualifyBatch(
   source: string,
   icpNotes: string,
   operatorDirective = "", // Jarvis-set override for what makes a good/bad prospect
+  skillsCtx = "", // Arsenal skills assigned to leadgen_qualify
 ): Promise<Qualification[]> {
   const prompt = `Source mode: ${source}\n\nOperator ICP notes: ${icpNotes}\n\nBusinesses:\n${JSON.stringify(
     businesses.map((b) => ({
@@ -173,7 +175,7 @@ async function qualifyBatch(
     }
   }
 
-  const system = QUALIFIER_PROMPT + directiveBlock(operatorDirective)
+  const system = QUALIFIER_PROMPT + directiveBlock(operatorDirective) + skillsCtx
 
   // standard tier with one manual escalation to heavy on parse failure
   const { text } = await generateText({
@@ -260,7 +262,8 @@ export async function runLeadgenAgent(
 
     // Qualification (with any Jarvis-set operator directive)
     const qualifyDirective = await getAgentOverride(userId, "leadgen_qualify")
-    const quals = await qualifyBatch(fresh, source, config.icpNotes, qualifyDirective)
+    const qualifySkills = await skillsBlockFor(userId, "leadgen_qualify") // Arsenal skills
+    const quals = await qualifyBatch(fresh, source, config.icpNotes, qualifyDirective, qualifySkills)
     let qualified = 0
 
     for (let i = 0; i < fresh.length; i++) {

@@ -415,6 +415,33 @@ function ConnectionsSection({
             </div>
           </div>
 
+          {/* n8n — instance URL editable here, API key via vault */}
+          <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">n8n (Automations)</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                  Runs workflows imported on the Arsenal page. API key goes in{" "}
+                  <button type="button" onClick={goToKeys} className="underline underline-offset-2 hover:text-foreground">
+                    API Keys
+                  </button>{" "}
+                  (create it in n8n: Settings → n8n API).
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="n8nBaseUrl" className="text-xs">
+                n8n instance URL
+              </Label>
+              <Input
+                id="n8nBaseUrl"
+                placeholder="https://your-n8n.example.com"
+                value={form.n8nBaseUrl}
+                onChange={(e) => setForm({ ...form, n8nBaseUrl: e.target.value })}
+              />
+            </div>
+          </div>
+
           {/* crawl4ai — base URL editable here, optional key via API Key Vault */}
           <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
             <div className="flex items-start justify-between gap-4">

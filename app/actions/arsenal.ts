@@ -1,0 +1,343 @@
+"use server"
+
+// Arsenal server actions — Skills (capability modules) + Automations (n8n).
+// Same invariants as everything else: getUserId() on every action, every query
+// userId-scoped, additive-only (no existing agent behavior changes unless a
+// skill is explicitly assigned to it).
+
+import { headers } from "next/headers"
+import { revalidatePath } from "next/cache"
+import { randomUUID } from "crypto"
+import { unzipSync, strFromU8 } from "fflate"
+import { generateText } from "ai"
+import { auth } from "@/lib/auth"
+import { db } from "@/lib/db"
+import { skills, automations, automationRuns } from "@/lib/db/schema"
+import { and, desc, eq } from "drizzle-orm"
+import { getModel } from "@/lib/llm"
+import { AGENT_KEYS } from "@/lib/config"
+import { parseSkillMarkdown, upsertSkill, isAgentKey, type ParsedSkill } from "@/lib/skills"
+import { CURATED_PACK } from "@/lib/skills-seed"
+import { isN8nConfigured, deployWorkflow, runWorkflow, inventoryWorkflow } from "@/lib/n8n"
+
+async function getUserId(): Promise<string> {
+  const session = await auth.api.getSession({ headers: await headers() })
+  if (!session?.user?.id) throw new Error("Not authenticated")
+  return session.user.id
+}
+
+// --- Skills ---------------------------------------------------------------------
+
+export async function listSkills() {
+  const userId = await getUserId()
+  return db.select().from(skills).where(eq(skills.userId, userId)).orderBy(desc(skills.updatedAt))
+}
+
+export async function seedCuratedPack() {
+  const userId = await getUserId()
+  let created = 0
+  let updated = 0
+  for (const skill of CURATED_PACK) {
+    const { created: wasCreated } = await upsertSkill(
+      userId,
+      {
+        name: skill.name,
+        description: skill.description,
+        content: skill.content,
+        tags: skill.tags,
+        targetAgents: skill.targetAgents,
+      },
+      "curated_pack",
+    )
+    if (wasCreated) created++
+    else updated++
+  }
+  revalidatePath("/")
+  return { ok: true, created, updated, total: CURATED_PACK.length }
+}
+
+/**
+ * Ingest a zip of skill files (SKILL.md / *.md / *.txt). Files without
+ * frontmatter get their metadata (description, tags, target agents) inferred
+ * by the LLM — arsenal.skill_extract, standard tier.
+ */
+export async function ingestSkillZip(formData: FormData) {
+  const userId = await getUserId()
+  const file = formData.get("file")
+  if (!(file instanceof File)) return { ok: false as const, error: "No file uploaded" }
+  if (file.size > 5 * 1024 * 1024) return { ok: false as const, error: "Zip too large (max 5MB)" }
+
+  let entries: Record<string, Uint8Array>
+  try {
+    entries = unzipSync(new Uint8Array(await file.arrayBuffer()))
+  } catch {
+    return { ok: false as const, error: "Not a valid zip file" }
+  }
+
+  const results: { file: string; skill?: string; error?: string }[] = []
+  let ingested = 0
+
+  for (const [path, bytes] of Object.entries(entries)) {
+    const lower = path.toLowerCase()
+    if (path.endsWith("/") || (!lower.endsWith(".md") && !lower.endsWith(".txt"))) continue
+    if (lower.includes("license") || lower.includes("changelog")) continue
+    if (ingested >= 30) {
+      results.push({ file: path, error: "skipped — 30-file cap per zip" })
+      continue
+    }
+    let raw: string
+    try {
+      raw = strFromU8(bytes)
+    } catch {
+      results.push({ file: path, error: "not utf-8 text" })
+      continue
+    }
+    if (raw.trim().length < 40) {
+      results.push({ file: path, error: "too short to be a skill" })
+      continue
+    }
+
+    const parsed = parseSkillMarkdown(path.split("/").pop() ?? path, raw)
+
+    // No declared target agents → infer metadata with the LLM
+    if (!parsed.targetAgents) {
+      try {
+        const inferred = await inferSkillMeta(parsed)
+        parsed.description = parsed.description || inferred.description
+        parsed.tags = parsed.tags || inferred.tags
+        parsed.targetAgents = inferred.targetAgents
+      } catch {
+        // Non-fatal: ingest as library-only (no injection until assigned)
+      }
+    }
+
+    const { created } = await upsertSkill(userId, parsed, "zip")
+    results.push({ file: path, skill: `${parsed.name}${created ? "" : " (updated)"}` })
+    ingested++
+  }
+
+  revalidatePath("/")
+  return { ok: true as const, ingested, results }
+}
+
+async function inferSkillMeta(parsed: ParsedSkill): Promise<{ description: string; tags: string; targetAgents: string }> {
+  const { text } = await generateText({
+    model: getModel("standard"), // arsenal.skill_extract — metadata inference for frontmatter-less skill files
+    system: `You classify a "skill" document for an operator OS with exactly these agents:
+${Object.entries(AGENT_KEYS)
+  .map(([k, v]) => `- ${k}: ${v}`)
+  .join("\n")}
+Output STRICT JSON: {"description": "one line, max 200 chars", "tags": "comma,separated,max5", "targetAgents": "comma-separated agent keys from the list above that would genuinely benefit — empty string if none fit"}. JSON only.`,
+    prompt: `SKILL NAME: ${parsed.name}\n\nCONTENT:\n${parsed.content.slice(0, 6000)}`,
+  })
+  const cleaned = text.replace(/```json?|```/g, "").trim()
+  const json = JSON.parse(cleaned) as { description?: string; tags?: string; targetAgents?: string }
+  return {
+    description: (json.description ?? "").slice(0, 300),
+    tags: (json.tags ?? "").slice(0, 200),
+    targetAgents: (json.targetAgents ?? "")
+      .split(",")
+      .map((a) => a.trim())
+      .filter(isAgentKey)
+      .join(","),
+  }
+}
+
+export async function updateSkillAction(
+  id: string,
+  patch: { active?: boolean; targetAgents?: string; name?: string; description?: string; content?: string },
+) {
+  const userId = await getUserId()
+  const clean: Record<string, unknown> = { updatedAt: new Date() }
+  if (patch.active !== undefined) clean.active = patch.active
+  if (patch.name !== undefined) clean.name = patch.name.slice(0, 120)
+  if (patch.description !== undefined) clean.description = patch.description.slice(0, 300)
+  if (patch.content !== undefined) clean.content = patch.content.slice(0, 20000)
+  if (patch.targetAgents !== undefined) {
+    clean.targetAgents = patch.targetAgents
+      .split(",")
+      .map((a) => a.trim())
+      .filter(isAgentKey)
+      .join(",")
+  }
+  await db.update(skills).set(clean).where(and(eq(skills.id, id), eq(skills.userId, userId)))
+  revalidatePath("/")
+  return { ok: true }
+}
+
+export async function deleteSkillAction(id: string) {
+  const userId = await getUserId()
+  await db.delete(skills).where(and(eq(skills.id, id), eq(skills.userId, userId)))
+  revalidatePath("/")
+  return { ok: true }
+}
+
+// --- Automations ----------------------------------------------------------------
+
+export async function listAutomations() {
+  const userId = await getUserId()
+  const rows = await db.select().from(automations).where(eq(automations.userId, userId)).orderBy(desc(automations.updatedAt))
+  const n8nReady = await isN8nConfigured(userId)
+  return { automations: rows, n8nConfigured: n8nReady }
+}
+
+export async function importAutomation(name: string, rawJson: string) {
+  const userId = await getUserId()
+  let definition: Record<string, unknown>
+  try {
+    definition = JSON.parse(rawJson)
+  } catch {
+    return { ok: false as const, error: "Not valid JSON — paste the exported n8n workflow JSON" }
+  }
+  if (!Array.isArray(definition.nodes)) {
+    return { ok: false as const, error: "JSON has no 'nodes' array — this doesn't look like an n8n workflow export" }
+  }
+  const inv = inventoryWorkflow(definition)
+  const id = randomUUID()
+  await db.insert(automations).values({
+    id,
+    userId,
+    name: name.trim() || inv.name,
+    description: `${inv.nodeCount} nodes · ${inv.triggers.length} trigger(s)`,
+    kind: "n8n",
+    definition,
+    analysis: { inventory: inv },
+    status: "imported",
+  })
+  revalidatePath("/")
+  return { ok: true as const, id, inventory: inv }
+}
+
+/**
+ * Jarvis-grade analysis of an imported workflow: what it does end-to-end,
+ * whether it's worth running whole, and which parts are absorbable into our
+ * existing agents as skills. Heavy tier — this is multi-constraint reasoning.
+ */
+export async function analyzeAutomation(id: string) {
+  const userId = await getUserId()
+  const [row] = await db
+    .select()
+    .from(automations)
+    .where(and(eq(automations.id, id), eq(automations.userId, userId)))
+    .limit(1)
+  if (!row) return { ok: false as const, error: "Automation not found" }
+
+  const inv = inventoryWorkflow(row.definition as Record<string, unknown>)
+  const defStr = JSON.stringify(row.definition).slice(0, 30000)
+
+  try {
+    const { text } = await generateText({
+      model: getModel("heavy"), // arsenal.analyze_automation — workflow JSON → capability analysis + absorbable parts
+      system: `You analyze n8n workflow JSON for a personal operator OS whose existing agents are:
+${Object.entries(AGENT_KEYS)
+  .map(([k, v]) => `- ${k}: ${v}`)
+  .join("\n")}
+Plus subsystems: lead-gen discovery (Google Maps + web search), career job scanner (ATS APIs), LinkedIn drafting (HITL), YouTube video pipeline, Money OS.
+
+Output STRICT JSON:
+{
+ "summary": "2-3 sentences: what this workflow does end to end",
+ "runWholeVerdict": "run_whole" | "absorb_parts" | "both" | "neither",
+ "runWholeRationale": "1-2 sentences",
+ "absorbable": [{"capability": "name", "detail": "what the workflow does here that our OS could adopt", "targetAgent": "one of the agent keys above or empty", "asSkill": "if worth saving as a prompt-skill, the full skill content (rules/method extracted+generalized), else empty"}],
+ "risks": "credentials, external services, or destructive steps to be aware of"
+}
+JSON only, no fences. Be honest: overlap with existing capabilities => say 'neither'.`,
+      prompt: `WORKFLOW INVENTORY: ${JSON.stringify(inv)}\n\nWORKFLOW JSON:\n${defStr}`,
+    })
+    const cleaned = text.replace(/```json?|```/g, "").trim()
+    const analysis = JSON.parse(cleaned) as Record<string, unknown>
+    await db
+      .update(automations)
+      .set({ analysis: { inventory: inv, ...analysis }, status: "analyzed", updatedAt: new Date() })
+      .where(and(eq(automations.id, id), eq(automations.userId, userId)))
+    revalidatePath("/")
+    return { ok: true as const, analysis }
+  } catch (e) {
+    return { ok: false as const, error: e instanceof Error ? e.message : "Analysis failed" }
+  }
+}
+
+/** Turn one absorbable capability (from analysis) into a real skill. */
+export async function absorbCapability(automationId: string, capabilityIndex: number) {
+  const userId = await getUserId()
+  const [row] = await db
+    .select()
+    .from(automations)
+    .where(and(eq(automations.id, automationId), eq(automations.userId, userId)))
+    .limit(1)
+  if (!row) return { ok: false as const, error: "Automation not found" }
+  const analysis = row.analysis as { absorbable?: { capability: string; detail: string; targetAgent: string; asSkill: string }[] }
+  const cap = analysis.absorbable?.[capabilityIndex]
+  if (!cap) return { ok: false as const, error: "Capability not found — run Analyze first" }
+  if (!cap.asSkill) return { ok: false as const, error: "This capability wasn't marked as skill-worthy" }
+
+  const { id } = await upsertSkill(
+    userId,
+    {
+      name: cap.capability.slice(0, 120),
+      description: cap.detail.slice(0, 300),
+      content: cap.asSkill.slice(0, 20000),
+      tags: "absorbed,automation",
+      targetAgents: isAgentKey(cap.targetAgent) ? cap.targetAgent : "",
+    },
+    "automation",
+  )
+  revalidatePath("/")
+  return { ok: true as const, skillId: id, name: cap.capability }
+}
+
+/** Deploy (if needed) + run an automation on the connected n8n instance. */
+export async function runAutomationAction(id: string, trigger: "manual" | "jarvis" = "manual") {
+  const userId = await getUserId()
+  const [row] = await db
+    .select()
+    .from(automations)
+    .where(and(eq(automations.id, id), eq(automations.userId, userId)))
+    .limit(1)
+  if (!row) return { ok: false as const, error: "Automation not found" }
+
+  const runId = randomUUID()
+  await db.insert(automationRuns).values({ id: runId, userId, automationId: id, trigger, status: "started" })
+
+  try {
+    let n8nId = row.n8nWorkflowId
+    if (!n8nId) {
+      n8nId = await deployWorkflow(userId, row.definition as Record<string, unknown>)
+      await db
+        .update(automations)
+        .set({ n8nWorkflowId: n8nId, status: "deployed", updatedAt: new Date() })
+        .where(eq(automations.id, id))
+    }
+    const { executionId } = await runWorkflow(userId, n8nId)
+    await db
+      .update(automationRuns)
+      .set({ status: "succeeded", detail: `execution ${executionId ?? "started"}` })
+      .where(eq(automationRuns.id, runId))
+    revalidatePath("/")
+    return { ok: true as const, executionId }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "run failed"
+    await db.update(automationRuns).set({ status: "failed", detail: msg.slice(0, 500) }).where(eq(automationRuns.id, runId))
+    revalidatePath("/")
+    return { ok: false as const, error: msg }
+  }
+}
+
+export async function deleteAutomationAction(id: string) {
+  const userId = await getUserId()
+  await db.delete(automations).where(and(eq(automations.id, id), eq(automations.userId, userId)))
+  await db.delete(automationRuns).where(and(eq(automationRuns.automationId, id), eq(automationRuns.userId, userId)))
+  revalidatePath("/")
+  return { ok: true }
+}
+
+export async function listAutomationRuns(automationId: string) {
+  const userId = await getUserId()
+  return db
+    .select()
+    .from(automationRuns)
+    .where(and(eq(automationRuns.automationId, automationId), eq(automationRuns.userId, userId)))
+    .orderBy(desc(automationRuns.createdAt))
+    .limit(10)
+}

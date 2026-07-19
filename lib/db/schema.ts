@@ -700,6 +700,54 @@ export const autopays = pgTable("autopays", {
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
 
+// --- Arsenal: skills + automations (Jarvis's extensible capability layer) -----
+// skills: ingested capability modules (from the curated pack, uploaded zips of
+// SKILL.md files, or Jarvis itself). Active skills whose targetAgents include
+// an agent key are injected into that agent's system prompt at run time —
+// deterministic lookup, no classifier (same philosophy as model routing).
+// automations: imported workflow definitions (n8n JSON). Analyzed by Jarvis
+// (heavy tier) into a structured summary + absorbable capabilities; runnable
+// against a real n8n instance when the seam is configured.
+
+export const skills = pgTable("skills", {
+  id: text("id").primaryKey(),
+  userId: text("userId").notNull(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(),
+  description: text("description").notNull().default(""),
+  content: text("content").notNull(), // the skill body — prompt rules/templates/heuristics
+  source: text("source").notNull().default("manual"), // curated_pack | zip | manual | jarvis | repo
+  tags: text("tags").notNull().default(""), // comma-separated
+  targetAgents: text("targetAgents").notNull().default(""), // comma-separated AgentKeys; empty = library-only
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+export const automations = pgTable("automations", {
+  id: text("id").primaryKey(),
+  userId: text("userId").notNull(),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  kind: text("kind").notNull().default("n8n"), // n8n (future: make, zapier)
+  definition: jsonb("definition").notNull().default({}), // the raw workflow JSON
+  analysis: jsonb("analysis").notNull().default({}), // Jarvis analysis: summary, nodes, absorbable capabilities
+  status: text("status").notNull().default("imported"), // imported | analyzed | deployed
+  n8nWorkflowId: text("n8nWorkflowId"), // id on the connected n8n instance once deployed
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+})
+
+export const automationRuns = pgTable("automation_runs", {
+  id: text("id").primaryKey(),
+  userId: text("userId").notNull(),
+  automationId: text("automationId").notNull(),
+  trigger: text("trigger").notNull().default("manual"), // manual | jarvis
+  status: text("status").notNull().default("started"), // started | succeeded | failed
+  detail: text("detail").notNull().default(""),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
 // secret_access_log: audit trail for the secrets-hardening pass — every read,
 // write, or delete of a vaulted API key is recorded here (provider + action +
 // caller only, NEVER the secret value). Closes the real gap AES-in-Postgres

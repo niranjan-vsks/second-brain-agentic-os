@@ -21,6 +21,7 @@ import { YoutubeTab } from "@/components/youtube/youtube-tab"
 import { CareerTab } from "@/components/career/career-tab"
 import { MoneyTab } from "@/components/money/money-tab"
 import { SettingsTab } from "@/components/settings/settings-tab"
+import { ArsenalTab } from "@/components/arsenal/arsenal-tab"
 import { OsChat } from "@/components/os-chat"
 import { NotificationsBell } from "@/components/notifications-bell"
 import {
@@ -36,6 +37,7 @@ import {
   Settings,
   ChevronDown,
   Sparkles,
+  Layers,
 } from "lucide-react"
 import type {
   Deal,
@@ -84,7 +86,7 @@ interface DashboardProps {
   careerResumes: Resume[]
 }
 
-type SectionKey = "prep" | "freelance" | "linkedin" | "youtube" | "career" | "money" | "chat" | "settings"
+type SectionKey = "prep" | "freelance" | "linkedin" | "youtube" | "career" | "money" | "chat" | "arsenal" | "settings"
 
 const SECTIONS: Record<
   SectionKey,
@@ -138,6 +140,13 @@ const SECTIONS: Record<
     icon: MessageSquare,
     title: "Jarvis",
     description: "Tool-calling assistant with voice: your data, calendar, and autopays.",
+  },
+  arsenal: {
+    label: "Arsenal",
+    group: "Assistant",
+    icon: Layers,
+    title: "Arsenal",
+    description: "Skills and automations: ingest capabilities, absorb workflows, and power up the agents.",
   },
   settings: {
     label: "Settings",
@@ -264,6 +273,15 @@ export function Dashboard({
                 <Sparkles className="size-3.5 text-primary" aria-hidden="true" />
                 Jarvis
               </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setActive("arsenal")}
+                className={`gap-1.5 text-[13px] ${active === "arsenal" ? "bg-accent text-foreground" : "text-muted-foreground"}`}
+              >
+                <Layers className="size-3.5 text-primary" aria-hidden="true" />
+                Arsenal
+              </Button>
             </nav>
 
             <div className="ml-auto flex items-center gap-1.5">
@@ -352,6 +370,9 @@ export function Dashboard({
           </TabsContent>
           <TabsContent value="chat">
             <OsChat />
+          </TabsContent>
+          <TabsContent value="arsenal">
+            <ArsenalTab />
           </TabsContent>
           <TabsContent value="settings">
             <SettingsTab />
