@@ -293,7 +293,21 @@ Top navbar with Base UI dropdown groups (NOTE: this project's dropdown-menu is B
 ### 4 new tables
 `app_config` (per-user JSON store, unique userId+key) · `api_keys` (encrypted, unique userId+provider) · `leadgen_prospects` (status: discovered → qualified → promoted | rejected) · `leadgen_runs` (audit). All in Ask OS allowlist? NO — deliberately excluded (api_keys must never be queryable via chat SQL; prospects/runs can be added later if wanted).
 
-## 14. How to Refine This Codebase
+## 14. Arsenal — Skills + Automations (Jarvis's extensible capability layer)
+
+### Skills — `lib/skills.ts`, `lib/skills-seed.ts`, `app/actions/arsenal.ts`, `components/arsenal/arsenal-tab.tsx`
+A skill = a DB-stored block of prompt-level expertise (rules/method/templates). Active skills whose `targetAgents` include an agent key are appended to that agent's system prompt at run time via `skillsBlockFor(userId, agentKey)` — the same seam as Jarvis's `directiveBlock`, injected in all 5 LLM agents (linkedin_post, youtube_script, leadgen_qualify, career_outreach, ads_creative). Deterministic targeting (no classifier), 6-skill/4000-char caps per agent, and skills can NEVER override safety/fabrication rules. Ingestion: curated pack (`CURATED_PACK` — 10 skills distilled from the 100-agents marketing guide, tuned to the India-freelance ICP), zip upload of SKILL.md files (frontmatter or LLM metadata inference — `arsenal.skill_extract`, standard tier), Jarvis `add_skill`, or absorbed from automations. Git-repo-link ingestion is a planned follow-up.
+
+### Automations — `lib/n8n.ts`, `automations`/`automation_runs` tables
+Import pasted n8n workflow JSON on the Arsenal page → deterministic node inventory → heavy-tier analysis (`arsenal.analyze_automation`): end-to-end summary, run-whole verdict, absorbable capabilities (each optionally pre-written as skill content — one-click "Absorb as skill"), risks. Running whole workflows needs the n8n seam: instance URL in Settings → Connections (`connections.n8nBaseUrl`) + API key in vault (`n8n` provider) — deploy/activate/run/executions via n8n public API; honest stub until connected. All runs audited in `automation_runs`.
+
+### Jarvis god-mode extensions
+6 new tools: `list_skills`, `add_skill`, `assign_skill`, `list_automations`, `analyze_automation`, `run_automation`. Jarvis may self-invoke `run_automation` when the analysis clearly serves the operator's request but must announce it. All mutations audited in `jarvis_actions`.
+
+### Secrets hardening (same pass)
+`secret_access_log` table — every vault read/write/delete audited (provider/action/source, never values), surfaced in Settings → API Keys. `scripts/rotate-encryption-key.mjs` re-encrypts all AES columns under a new `CREDENTIALS_ENCRYPTION_KEY` (idempotent). Correct env name everywhere: `CREDENTIALS_ENCRYPTION_KEY` (older docs said TOKEN_ENCRYPTION_KEY — wrong). Bootstrap secrets (`CREDENTIALS_ENCRYPTION_KEY`, `CRON_SECRET`, `DATABASE_URL`, `BETTER_AUTH_SECRET`) are deliberately env-only — they can't live inside the vault they protect. AA (Setu) is a read-only config seam only — no consumer API exists for mandate cancellation (see Money OS constitution).
+
+## 15. How to Refine This Codebase
 
 1. Read this doc, then read `lib/constants.ts`, `lib/db/schema.ts`, `app/actions/*.ts`, and `components/dashboard.tsx` — that's ~80% of the mental model.
 2. Follow existing patterns exactly: server action + `getUserId()` + userId-scoped queries + `revalidatePath` / SWR `mutate`.
