@@ -388,15 +388,67 @@ function ConnectionsSection({
             <StatusDot ok={c.cronSecret} okLabel="Set" badLabel="Not set" />
           </div>
 
+          {/* LinkedIn publish — token via API Key Vault, person URN editable here */}
+          <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">LinkedIn Publishing</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                  Real auto-publish for approved posts (official API, w_member_social). Access token lives in{" "}
+                  <button type="button" onClick={goToKeys} className="underline underline-offset-2 hover:text-foreground">
+                    API Keys
+                  </button>
+                  ; set your member URN below.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="linkedinPersonUrn" className="text-xs">
+                LinkedIn person URN
+              </Label>
+              <Input
+                id="linkedinPersonUrn"
+                placeholder="urn:li:person:AbC123"
+                value={form.linkedinPersonUrn}
+                onChange={(e) => setForm({ ...form, linkedinPersonUrn: e.target.value })}
+              />
+            </div>
+          </div>
+
+          {/* crawl4ai — base URL editable here, optional key via API Key Vault */}
+          <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">crawl4ai (page extraction)</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                  Self-hosted crawler for JD/page extraction (handles JS-heavy pages better than plain fetch). Optional
+                  bearer key goes in API Keys.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="crawl4aiBaseUrl" className="text-xs">
+                crawl4ai base URL
+              </Label>
+              <Input
+                id="crawl4aiBaseUrl"
+                placeholder="https://your-crawl4ai.example.com"
+                value={form.crawl4aiBaseUrl}
+                onChange={(e) => setForm({ ...form, crawl4aiBaseUrl: e.target.value })}
+              />
+            </div>
+          </div>
+
           <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
             <div className="min-w-0">
               <p className="text-sm font-medium">Encryption</p>
               <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                AES key for tokens + stored API keys. Server-side only — set ENCRYPTION_KEY in Vercel env vars (needed
-                before any key above can be saved).
+                AES key for tokens + stored API keys. Server-side only — set CREDENTIALS_ENCRYPTION_KEY in Vercel env
+                vars (needed before any key above can be saved). This is the bootstrap secret protecting the vault
+                itself, so it can never be UI-configurable.
               </p>
             </div>
-            <StatusDot ok={c.encryptionReady} okLabel="Ready" badLabel="ENCRYPTION_KEY missing" />
+            <StatusDot ok={c.encryptionReady} okLabel="Ready" badLabel="CREDENTIALS_ENCRYPTION_KEY missing" />
           </div>
 
           <div className="flex justify-end">
@@ -550,6 +602,48 @@ function KeysSection({ data, onSaved }: { data: Snapshot; onSaved: () => void })
               )
             })}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="surface-raised border-0">
+        <CardHeader>
+          <CardTitle>Secret Access Log</CardTitle>
+          <CardDescription>
+            Recent reads/writes/deletes of vaulted keys — values are never logged, only which secret was touched, by
+            what, and when.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {data.recentSecretAccess.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No access recorded yet.</p>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {data.recentSecretAccess.map((r, i) => (
+                <div
+                  key={i}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2"
+                >
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      variant="outline"
+                      className={`font-mono text-[10px] uppercase ${
+                        r.action === "delete"
+                          ? "text-destructive"
+                          : r.action === "write"
+                            ? "text-primary"
+                            : "text-muted-foreground"
+                      }`}
+                    >
+                      {r.action}
+                    </Badge>
+                    <span className="font-mono text-xs">{r.provider}</span>
+                    {r.source ? <span className="text-xs text-muted-foreground">via {r.source}</span> : null}
+                  </div>
+                  <span className="text-micro text-muted-foreground">{new Date(r.createdAt).toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

@@ -8,6 +8,13 @@
       "when": 1784409367113,
       "tag": "0000_adorable_captain_cross",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784483049635,
+      "tag": "0001_bouncy_betty_ross",
+      "breakpoints": true
     }
   ]
 }

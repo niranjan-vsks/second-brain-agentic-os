@@ -86,7 +86,7 @@ export async function extractJobFromUrl(jobId: string) {
   if (!job) throw new Error("Job not found")
   if (!job.jobUrl) return { ok: false as const, error: "No URL on this job — paste the JD manually." }
   try {
-    const text = await fetchPage(job.jobUrl) // crawl4ai preferred, plain fetch fallback
+    const text = await fetchPage(job.jobUrl, userId) // crawl4ai preferred, plain fetch fallback
     await db.update(jobApplications).set({ jobDescription: text.slice(0, 25000), updatedAt: new Date() }).where(eq(jobApplications.id, jobId))
     revalidatePath("/")
     return { ok: true as const }

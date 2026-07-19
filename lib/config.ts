@@ -10,9 +10,10 @@
 // This lets the owner bring their own keys from the UI without redeploying,
 // while env vars remain the gold standard for catastrophic-if-leaked secrets.
 
+import { randomUUID } from "crypto"
 import { db } from "@/lib/db"
-import { appConfig, apiKeys } from "@/lib/db/schema"
-import { and, eq } from "drizzle-orm"
+import { appConfig, apiKeys, secretAccessLog } from "@/lib/db/schema"
+import { and, desc, eq } from "drizzle-orm"
 import { decrypt, isCryptoConfigured } from "@/lib/crypto"
 
 // Provider registry: id -> env var fallback + display metadata.
@@ -69,10 +70,35 @@ export const KEY_PROVIDERS: Record<
     docsUrl: "https://vercel.com",
     purpose: "Bearer secret for your self-hosted browser-automation worker (PDF render, portal snapshots)",
   },
+  linkedin_access_token: {
+    label: "LinkedIn Access Token",
+    envVar: "LINKEDIN_ACCESS_TOKEN",
+    docsUrl: "https://www.linkedin.com/developers/apps",
+    purpose: "Official API token (w_member_social scope) — enables real auto-publish for approved posts",
+  },
+  crawl4ai: {
+    label: "crawl4ai",
+    envVar: "CRAWL4AI_API_KEY",
+    docsUrl: "https://github.com/unclecode/crawl4ai",
+    purpose: "Bearer key for your self-hosted crawl4ai instance (JD/page extraction) — optional, only if your instance requires auth",
+  },
+}
+
+/**
+ * Audit log for secret access — fire-and-forget, never blocks the caller.
+ * Records provider + action + calling code path only, never the secret value.
+ */
+function logSecretAccess(userId: string, provider: string, action: "read" | "write" | "delete", source = ""): void {
+  db.insert(secretAccessLog)
+    .values({ id: randomUUID(), userId, provider, action, source })
+    .catch(() => {
+      // Audit logging must never break the calling flow (e.g. before the
+      // secret_access_log table exists on a not-yet-migrated DB).
+    })
 }
 
 /** Resolve a secret: user's stored DB key first, env var fallback. Null if neither. */
-export async function getSecret(userId: string, provider: string): Promise<string | null> {
+export async function getSecret(userId: string, provider: string, source = ""): Promise<string | null> {
   try {
     if (isCryptoConfigured()) {
       const rows = await db
@@ -82,7 +108,10 @@ export async function getSecret(userId: string, provider: string): Promise<strin
         .limit(1)
       if (rows.length > 0 && rows[0].encryptedKey) {
         const value = decrypt(rows[0].encryptedKey)
-        if (value) return value
+        if (value) {
+          logSecretAccess(userId, provider, "read", source)
+          return value
+        }
       }
     }
   } catch {
@@ -90,6 +119,16 @@ export async function getSecret(userId: string, provider: string): Promise<strin
   }
   const envVar = KEY_PROVIDERS[provider]?.envVar
   return (envVar && process.env[envVar]) || null
+}
+
+/** Most recent secret-access events for a user (Settings UI visibility). */
+export async function getRecentSecretAccess(userId: string, limit = 20) {
+  return db
+    .select()
+    .from(secretAccessLog)
+    .where(eq(secretAccessLog.userId, userId))
+    .orderBy(desc(secretAccessLog.createdAt))
+    .limit(limit)
 }
 
 /** Read a JSON config blob for a user. Returns fallback when unset. */
@@ -170,11 +209,17 @@ export interface ConnectionsConfig {
   telegramAllowedUserId: string
   /** Base URL of a self-hosted browser-automation worker (PDF render, portal snapshots) */
   browserWorkerUrl: string
+  /** LinkedIn member URN (urn:li:person:...) the access token posts as */
+  linkedinPersonUrn: string
+  /** Base URL of a self-hosted crawl4ai instance (page fetch/extraction) */
+  crawl4aiBaseUrl: string
 }
 
 export const CONNECTIONS_DEFAULTS: ConnectionsConfig = {
   telegramAllowedUserId: "",
   browserWorkerUrl: "",
+  linkedinPersonUrn: "",
+  crawl4aiBaseUrl: "",
 }
 
 // --- Agent instruction overrides (set by Jarvis or the Settings UI) -----------

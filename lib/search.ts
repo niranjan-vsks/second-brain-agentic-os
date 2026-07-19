@@ -88,15 +88,24 @@ export async function webSearch(userId: string, query: string, maxResults = 8): 
 
 // Page fetch/extraction — prefers crawl4ai when configured (handles SPAs/JS),
 // falls back to a plain fetch with HTML stripping. Used for JD extraction.
-export async function fetchPage(url: string): Promise<string> {
-  const crawl4ai = process.env.CRAWL4AI_URL
+// crawl4ai base URL: Settings → Connections (per-user) or CRAWL4AI_URL env;
+// optional bearer key: vault ("crawl4ai" provider) or CRAWL4AI_API_KEY env.
+export async function fetchPage(url: string, userId?: string): Promise<string> {
+  let crawl4ai = process.env.CRAWL4AI_URL
+  let crawl4aiKey = process.env.CRAWL4AI_API_KEY
+  if (userId) {
+    const { getConfig, CONNECTIONS_DEFAULTS } = await import("@/lib/config")
+    const conn = await getConfig(userId, "connections", CONNECTIONS_DEFAULTS)
+    crawl4ai = crawl4ai || conn.crawl4aiBaseUrl
+    crawl4aiKey = crawl4aiKey || (await getSecret(userId, "crawl4ai", "search.fetchPage")) || undefined
+  }
   if (crawl4ai) {
     try {
       const res = await fetch(`${crawl4ai.replace(/\/$/, "")}/crawl`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(process.env.CRAWL4AI_API_KEY ? { Authorization: `Bearer ${process.env.CRAWL4AI_API_KEY}` } : {}),
+          ...(crawl4aiKey ? { Authorization: `Bearer ${crawl4aiKey}` } : {}),
         },
         body: JSON.stringify({ urls: [url], f: "markdown" }),
         signal: AbortSignal.timeout(60000),

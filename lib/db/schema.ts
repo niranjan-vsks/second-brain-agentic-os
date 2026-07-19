@@ -699,3 +699,17 @@ export const autopays = pgTable("autopays", {
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })
+
+// secret_access_log: audit trail for the secrets-hardening pass — every read,
+// write, or delete of a vaulted API key is recorded here (provider + action +
+// caller only, NEVER the secret value). Closes the real gap AES-in-Postgres
+// has vs a dedicated secrets manager: visibility into who/what touched a
+// secret and when.
+export const secretAccessLog = pgTable("secret_access_log", {
+  id: text("id").primaryKey(),
+  userId: text("userId").notNull(),
+  provider: text("provider").notNull(),
+  action: text("action").notNull(), // read | write | delete
+  source: text("source").notNull().default(""), // calling code path, e.g. "leadgen.qualify"
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})

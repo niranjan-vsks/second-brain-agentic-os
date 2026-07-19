@@ -14,6 +14,7 @@ import {
 import { and, desc, eq, asc, lte, inArray } from "drizzle-orm"
 import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
+import { getSecret, getConfig, CONNECTIONS_DEFAULTS } from "@/lib/config"
 
 async function getUserId() {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -339,14 +340,16 @@ export async function deletePost(postId: number) {
 // Official API only (w_member_social). No cookie/session automation, ever.
 
 async function publishToLinkedIn(userId: string, postId: number, content: string) {
-  const token = process.env.LINKEDIN_ACCESS_TOKEN
-  const personUrn = process.env.LINKEDIN_PERSON_URN
+  // Vault key / Settings → Connections first, env fallback (same order as every provider)
+  const token = await getSecret(userId, "linkedin_access_token", "linkedin.publish")
+  const connections = await getConfig(userId, "connections", CONNECTIONS_DEFAULTS)
+  const personUrn = connections.linkedinPersonUrn || process.env.LINKEDIN_PERSON_URN
 
   if (!token || !personUrn) {
     await notify(
       userId,
       "error",
-      "LinkedIn credentials missing. Add LINKEDIN_ACCESS_TOKEN and LINKEDIN_PERSON_URN env vars (official OAuth, w_member_social scope). Post kept as approved.",
+      "LinkedIn credentials missing. Add a LinkedIn Access Token in Settings → API Keys and your person URN in Settings → Connections (official OAuth, w_member_social scope). Post kept as approved.",
       postId,
     )
     await db

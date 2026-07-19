@@ -9,12 +9,13 @@ import { revalidatePath } from "next/cache"
 import { randomUUID } from "crypto"
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
-import { appConfig, apiKeys, connectedAccounts, youtubeChannels } from "@/lib/db/schema"
+import { appConfig, apiKeys, connectedAccounts, youtubeChannels, secretAccessLog } from "@/lib/db/schema"
 import { and, eq } from "drizzle-orm"
 import { encrypt, isCryptoConfigured } from "@/lib/crypto"
 import {
   KEY_PROVIDERS,
   getConfig,
+  getRecentSecretAccess,
   LEADGEN_DEFAULTS,
   META_ADS_DEFAULTS,
   GENERAL_DEFAULTS,
@@ -55,7 +56,7 @@ export async function saveConfigAction(key: string, value: Record<string, unknow
 export async function getSettingsSnapshot() {
   const userId = await getUserId()
 
-  const [leadgen, metaAds, general, connectionsForm, keyRows, calRows, ytRows] = await Promise.all([
+  const [leadgen, metaAds, general, connectionsForm, keyRows, calRows, ytRows, recentSecretAccess] = await Promise.all([
     getConfig(userId, "leadgen", LEADGEN_DEFAULTS),
     getConfig(userId, "funnels.meta_ads", META_ADS_DEFAULTS),
     getConfig(userId, "general", GENERAL_DEFAULTS),
@@ -63,6 +64,7 @@ export async function getSettingsSnapshot() {
     db.select().from(apiKeys).where(eq(apiKeys.userId, userId)),
     db.select().from(connectedAccounts).where(eq(connectedAccounts.userId, userId)),
     db.select().from(youtubeChannels).where(eq(youtubeChannels.userId, userId)),
+    getRecentSecretAccess(userId, 20).catch(() => []),
   ])
 
   const llm = describeLlm()
@@ -94,6 +96,12 @@ export async function getSettingsSnapshot() {
       docsUrl: p.docsUrl,
       purpose: p.purpose,
       envConfigured: Boolean(process.env[p.envVar]),
+    })),
+    recentSecretAccess: recentSecretAccess.map((r) => ({
+      provider: r.provider,
+      action: r.action,
+      source: r.source,
+      createdAt: r.createdAt.toISOString(),
     })),
     connections: {
       googleCalendar: calRows.find((c) => c.provider === "google_calendar")?.status ?? "not_connected",
@@ -131,7 +139,7 @@ export async function saveApiKeyAction(provider: string, key: string, label: str
   if (!KEY_PROVIDERS[provider]) throw new Error("Unknown provider")
   const trimmed = key.trim()
   if (trimmed.length < 8) throw new Error("Key looks too short")
-  if (!isCryptoConfigured()) throw new Error("ENCRYPTION_KEY is not set — cannot store keys securely")
+  if (!isCryptoConfigured()) throw new Error("CREDENTIALS_ENCRYPTION_KEY is not set — cannot store keys securely")
 
   const encryptedKey = encrypt(trimmed)
   const lastFour = trimmed.slice(-4)
@@ -155,6 +163,7 @@ export async function saveApiKeyAction(provider: string, key: string, label: str
       lastFour,
     })
   }
+  await db.insert(secretAccessLog).values({ id: randomUUID(), userId, provider, action: "write", source: "settings.saveApiKeyAction" }).catch(() => {})
   revalidatePath("/")
   return { ok: true }
 }
@@ -162,6 +171,7 @@ export async function saveApiKeyAction(provider: string, key: string, label: str
 export async function deleteApiKeyAction(provider: string) {
   const userId = await getUserId()
   await db.delete(apiKeys).where(and(eq(apiKeys.userId, userId), eq(apiKeys.provider, provider)))
+  await db.insert(secretAccessLog).values({ id: randomUUID(), userId, provider, action: "delete", source: "settings.deleteApiKeyAction" }).catch(() => {})
   revalidatePath("/")
   return { ok: true }
 }
