@@ -438,5 +438,33 @@ export function orchestratorTools(userId: string) {
         return result
       },
     }),
+
+    // --- Browser automation (agent-browser in Vercel Sandbox) -----------------
+
+    browse_page: tool({
+      description:
+        "Open a URL in a real sandboxed browser (agent-browser) and return the page title, readable text, and an accessibility snapshot of interactive elements. READ-ONLY — no clicking, typing, or form submission. Use for pages that need JS rendering (job portals, SPAs) when plain fetch isn't enough. Slow (~20-40s cold start) — use sparingly, one call per page.",
+      inputSchema: z.object({
+        url: z.string().url().describe("Full URL including https://"),
+      }),
+      execute: async ({ url }) => {
+        try {
+          const { browsePage, isAgentBrowserAvailable } = await import("@/lib/browser-automation")
+          if (!isAgentBrowserAvailable()) {
+            return {
+              error:
+                "Browser sandbox not available in this environment. On Vercel deployments it activates automatically; locally it needs VERCEL_TOKEN/VERCEL_TEAM_ID/VERCEL_PROJECT_ID.",
+            }
+          }
+          const page = await browsePage(url)
+          await logAction(userId, "browse_page", `Browsed ${url} — "${page.title}"`, { url })
+          return { title: page.title, finalUrl: page.url, pageText: page.pageText.slice(0, 10000), interactiveElements: page.snapshot.slice(0, 4000) }
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "browse failed"
+          await logAction(userId, "browse_page", `FAILED ${url}: ${msg.slice(0, 200)}`, { url, error: msg.slice(0, 300) })
+          return { error: msg }
+        }
+      },
+    }),
   }
 }

@@ -1,10 +1,19 @@
 // Browser-automation worker seam (Task 0.5) — one worker covers three needs:
 // PDF rendering (Playwright/Chromium, per the real generate-pdf.mjs), Level-3
-// scan liveness verification, and Block G posting snapshots. STUB until a
-// worker URL (+ optional secret) is set — Settings → Connections → Browser
-// Worker, or BROWSER_WORKER_URL/BROWSER_WORKER_SECRET env (env wins if set).
+// scan liveness verification, and Block G posting snapshots.
+//
+// RESOLUTION CHAIN (per capability):
+//   1. Custom worker URL (Settings → Connections / BROWSER_WORKER_URL env)
+//   2. agent-browser in Vercel Sandbox (lib/browser-automation.ts) — automatic
+//      on Vercel deployments, covers verify + snapshot (not PDF render)
+//   3. Honest stub error
 
 import { getConfig, getSecret, CONNECTIONS_DEFAULTS } from "@/lib/config"
+import {
+  isAgentBrowserAvailable,
+  verifyPostingWithAgentBrowser,
+  snapshotPostingWithAgentBrowser,
+} from "@/lib/browser-automation"
 
 async function resolveWorker(userId: string): Promise<{ base: string; secret: string | null } | null> {
   const conn = await getConfig(userId, "connections", CONNECTIONS_DEFAULTS)
@@ -15,7 +24,8 @@ async function resolveWorker(userId: string): Promise<{ base: string; secret: st
 }
 
 export async function isBrowserWorkerConfigured(userId: string): Promise<boolean> {
-  return (await resolveWorker(userId)) !== null
+  if ((await resolveWorker(userId)) !== null) return true
+  return isAgentBrowserAvailable()
 }
 
 async function callWorker<T>(userId: string, path: string, body: unknown): Promise<T> {
@@ -36,7 +46,8 @@ async function callWorker<T>(userId: string, path: string, body: unknown): Promi
 
 // Renders HTML to PDF. Paper format rule from the real pdf mode: US/Canada =
 // letter, rest of world = a4. Returns a URL to the rendered PDF (worker is
-// expected to upload to Blob or return a data URL).
+// expected to upload to Blob or return a data URL). Custom-worker-only for
+// now — piping a binary PDF out of the agent-browser sandbox is a follow-up.
 export async function renderPdf(userId: string, html: string, format: "letter" | "a4"): Promise<{ pdfUrl: string }> {
   return callWorker(userId, "/render-pdf", { html, format })
 }
@@ -45,12 +56,14 @@ export async function renderPdf(userId: string, html: string, format: "letter" |
 // vs Expired (?error=true redirect, "no longer available"/"filled"/"expired",
 // or <300 chars of real content). Sequential only — never parallel (doc 09).
 export async function verifyPostingLiveness(userId: string, url: string): Promise<{ active: boolean; reason: string }> {
-  return callWorker(userId, "/verify-posting", { url })
+  if (await resolveWorker(userId)) return callWorker(userId, "/verify-posting", { url })
+  return verifyPostingWithAgentBrowser(url) // agent-browser sandbox fallback
 }
 
 // Block G high-reliability signal: posting age + apply-button state snapshot.
 export async function snapshotPosting(userId: string, url: string): Promise<{ snapshotText: string; applyButtonState: string }> {
-  return callWorker(userId, "/snapshot-posting", { url })
+  if (await resolveWorker(userId)) return callWorker(userId, "/snapshot-posting", { url })
+  return snapshotPostingWithAgentBrowser(url) // agent-browser sandbox fallback
 }
 
 // ASCII normalization from generate-pdf.mjs — pure utility, ported as-is
