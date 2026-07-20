@@ -194,6 +194,30 @@
     transform: translateY(1px) scale(0.985);
   }
 
+  /* Section entrance — subtle fade + rise when switching sections */
+  .section-enter {
+    animation: section-enter var(--dur-med) var(--ease-out) both;
+  }
+  @keyframes section-enter {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Active nav underline accent */
+  .nav-active {
+    position: relative;
+  }
+  .nav-active::after {
+    content: "";
+    position: absolute;
+    left: 0.5rem;
+    right: 0.5rem;
+    bottom: -1px;
+    height: 2px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, transparent, var(--primary), transparent);
+  }
+
   /* Skeleton shimmer — replaces spinners for content loads */
   .skeleton {
     background: linear-gradient(

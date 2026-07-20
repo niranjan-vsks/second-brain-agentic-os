@@ -219,7 +219,7 @@ export function Dashboard({
               onClick={() => setActive("prep")}
               className="flex items-center gap-2 rounded-md px-1.5 py-1 transition-colors hover:bg-accent"
             >
-              <span className="flex size-6 items-center justify-center rounded-md bg-primary/15 text-primary">
+              <span className="surface-glow flex size-6 items-center justify-center rounded-md bg-primary/15 text-primary ring-1 ring-primary/25">
                 <Terminal className="size-3.5" aria-hidden="true" />
               </span>
               <span className="font-mono text-sm font-semibold tracking-tight">operator_os</span>
@@ -347,21 +347,19 @@ export function Dashboard({
 
         {/* Section hero strip */}
         <div className="grid-backdrop border-b border-border">
-          <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-6 md:px-6 md:py-8">
-            <span className="surface-raised flex size-12 shrink-0 items-center justify-center rounded-xl text-primary">
+          <div key={active} className="section-enter mx-auto flex max-w-7xl items-center gap-4 px-4 py-6 md:px-6 md:py-8">
+            <span className="surface-raised surface-glow flex size-12 shrink-0 items-center justify-center rounded-xl text-primary transition-transform duration-200">
               <SectionIcon className="size-5" aria-hidden="true" />
             </span>
             <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-2">
-                <span className="text-micro text-primary">{section.group}</span>
-              </div>
+              <span className="text-micro text-primary/90">{section.group}</span>
               <h1 className="text-xl font-semibold tracking-tight text-balance md:text-2xl">{section.title}</h1>
-              <p className="text-sm text-muted-foreground text-pretty">{section.description}</p>
+              <p className="max-w-2xl text-sm text-muted-foreground text-pretty">{section.description}</p>
             </div>
           </div>
         </div>
 
-        <div className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6">
+        <div key={active} className="section-enter mx-auto w-full max-w-7xl px-4 py-6 md:px-6">
           <TabsContent value="prep">
             <PrepTab topics={topics} drills={drills} resources={resources} />
           </TabsContent>
