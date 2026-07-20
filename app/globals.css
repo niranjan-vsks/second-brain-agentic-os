@@ -40,6 +40,9 @@
   --color-background: var(--background);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --color-status-success: var(--status-success);
+  --color-status-pending: var(--status-pending);
+  --color-status-error: var(--status-error);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -91,6 +94,14 @@
   --surface-1: oklch(0.17 0.008 160);
   --surface-2: oklch(0.2 0.009 160);
   --surface-3: oklch(0.24 0.01 160);
+  /* Traffic-light status semantics (Agent Playground + status chips) */
+  --status-success: oklch(0.78 0.16 160);
+  --status-pending: oklch(0.82 0.15 85);
+  --status-error: oklch(0.65 0.2 25);
+  /* Motion tokens for consistent, premium micro-interactions */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 150ms;
+  --dur-med: 240ms;
 }
 
 @layer base {
@@ -133,4 +144,91 @@
     letter-spacing: 0.12em;
     text-transform: uppercase;
   }
+
+  /* --- Agent Playground: glowing status nodes ------------------------------ */
+  .node-glow-success {
+    border-color: color-mix(in oklch, var(--status-success) 55%, transparent);
+    box-shadow:
+      0 1px 0 oklch(1 0 0 / 6%) inset,
+      0 0 0 1px color-mix(in oklch, var(--status-success) 30%, transparent),
+      0 0 22px -4px color-mix(in oklch, var(--status-success) 55%, transparent);
+  }
+  .node-glow-pending {
+    border-color: color-mix(in oklch, var(--status-pending) 55%, transparent);
+    box-shadow:
+      0 1px 0 oklch(1 0 0 / 6%) inset,
+      0 0 0 1px color-mix(in oklch, var(--status-pending) 30%, transparent),
+      0 0 22px -4px color-mix(in oklch, var(--status-pending) 55%, transparent);
+    animation: node-pulse 1.8s var(--ease-out) infinite;
+  }
+  .node-glow-error {
+    border-color: color-mix(in oklch, var(--status-error) 60%, transparent);
+    box-shadow:
+      0 1px 0 oklch(1 0 0 / 6%) inset,
+      0 0 0 1px color-mix(in oklch, var(--status-error) 34%, transparent),
+      0 0 24px -4px color-mix(in oklch, var(--status-error) 60%, transparent);
+    animation: node-pulse 1.4s var(--ease-out) infinite;
+  }
+  .node-glow-idle {
+    opacity: 0.62;
+  }
+  @keyframes node-pulse {
+    0%, 100% { filter: brightness(1); }
+    50% { filter: brightness(1.35); }
+  }
+
+  /* Glossy node face — soft top highlight over the card surface */
+  .node-face {
+    background:
+      linear-gradient(180deg, oklch(1 0 0 / 5%) 0%, oklch(1 0 0 / 0%) 42%),
+      var(--card);
+  }
+
+  /* Premium press feedback for interactive cards/buttons */
+  .press {
+    transition:
+      transform var(--dur-fast) var(--ease-out),
+      box-shadow var(--dur-fast) var(--ease-out);
+  }
+  .press:active {
+    transform: translateY(1px) scale(0.985);
+  }
+
+  /* Skeleton shimmer — replaces spinners for content loads */
+  .skeleton {
+    background: linear-gradient(
+      100deg,
+      var(--muted) 30%,
+      color-mix(in oklch, var(--muted) 60%, oklch(1 0 0 / 8%)) 50%,
+      var(--muted) 70%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.4s ease-in-out infinite;
+    border-radius: var(--radius-sm);
+  }
+  @keyframes skeleton-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+}
+
+/* React Flow theming to match the mission-control surface */
+.react-flow__attribution { display: none; }
+.rf-agent-canvas .react-flow__background { opacity: 0.5; }
+.rf-agent-canvas .react-flow__controls,
+.rf-agent-canvas .react-flow__minimap {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: 0 8px 24px -12px oklch(0 0 0 / 55%);
+}
+.rf-agent-canvas .react-flow__controls-button {
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-foreground);
+}
+.rf-agent-canvas .react-flow__controls-button:hover {
+  background: var(--accent);
+  color: var(--foreground);
 }

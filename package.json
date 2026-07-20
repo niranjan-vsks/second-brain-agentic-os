@@ -17,6 +17,7 @@
     "@vercel/analytics": "1.6.1",
     "@vercel/blob": "^2.6.1",
     "@vercel/sandbox": "^2.7.1",
+    "@xyflow/react": "^12.11.2",
     "ai": "^7.0.16",
     "better-auth": "^1.6.23",
     "class-variance-authority": "^0.7.1",

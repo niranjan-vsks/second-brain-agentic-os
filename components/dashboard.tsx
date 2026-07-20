@@ -22,6 +22,7 @@ import { CareerTab } from "@/components/career/career-tab"
 import { MoneyTab } from "@/components/money/money-tab"
 import { SettingsTab } from "@/components/settings/settings-tab"
 import { ArsenalTab } from "@/components/arsenal/arsenal-tab"
+import { PlaygroundTab } from "@/components/playground/playground-tab"
 import { OsChat } from "@/components/os-chat"
 import { NotificationsBell } from "@/components/notifications-bell"
 import {
@@ -38,6 +39,7 @@ import {
   ChevronDown,
   Sparkles,
   Layers,
+  Workflow,
 } from "lucide-react"
 import type {
   Deal,
@@ -86,7 +88,7 @@ interface DashboardProps {
   careerResumes: Resume[]
 }
 
-type SectionKey = "prep" | "freelance" | "linkedin" | "youtube" | "career" | "money" | "chat" | "arsenal" | "settings"
+type SectionKey = "prep" | "freelance" | "linkedin" | "youtube" | "career" | "money" | "chat" | "arsenal" | "playground" | "settings"
 
 const SECTIONS: Record<
   SectionKey,
@@ -147,6 +149,13 @@ const SECTIONS: Record<
     icon: Layers,
     title: "Arsenal",
     description: "Skills and automations: ingest capabilities, absorb workflows, and power up the agents.",
+  },
+  playground: {
+    label: "Agent Playground",
+    group: "Assistant",
+    icon: Workflow,
+    title: "Agent Playground",
+    description: "Live orchestration canvas — every agent, its handoffs, and real-time status. Rewire, pause, inspect.",
   },
   settings: {
     label: "Settings",
@@ -282,6 +291,15 @@ export function Dashboard({
                 <Layers className="size-3.5 text-primary" aria-hidden="true" />
                 Arsenal
               </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setActive("playground")}
+                className={`gap-1.5 text-[13px] ${active === "playground" ? "bg-accent text-foreground" : "text-muted-foreground"}`}
+              >
+                <Workflow className="size-3.5 text-primary" aria-hidden="true" />
+                Playground
+              </Button>
             </nav>
 
             <div className="ml-auto flex items-center gap-1.5">
@@ -373,6 +391,9 @@ export function Dashboard({
           </TabsContent>
           <TabsContent value="arsenal">
             <ArsenalTab />
+          </TabsContent>
+          <TabsContent value="playground">
+            <PlaygroundTab />
           </TabsContent>
           <TabsContent value="settings">
             <SettingsTab />

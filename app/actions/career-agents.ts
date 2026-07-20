@@ -456,6 +456,12 @@ export async function runAutoPipeline(jobId: string) {
   const userId = await getUserId()
   const steps: Record<string, string> = {}
 
+  // Agent Playground pause guard — Conductor is the auto-pipeline orchestrator.
+  const { isAgentPaused } = await import("@/lib/agent-graph")
+  if (await isAgentPaused(userId, "career.auto_pipeline")) {
+    return { ok: false as const, error: "Conductor (auto-pipeline) is paused in the Agent Playground — resume it to run.", steps }
+  }
+
   const [job] = await db
     .select()
     .from(jobApplications)

@@ -207,6 +207,11 @@ export async function runLeadgenAgent(
   if (trigger === "cron" && !config.enabled) {
     return { runId: "", found: 0, qualified: 0, message: "Lead-gen agent disabled in Settings" }
   }
+  // Agent Playground pause guard (dispatch-time check, spec §2.5).
+  const { isAgentPaused } = await import("@/lib/agent-graph")
+  if (await isAgentPaused(userId, "leadgen.qualify")) {
+    return { runId: "", found: 0, qualified: 0, message: "Prospector is paused in the Agent Playground — resume it to run." }
+  }
 
   const source =
     overrides?.source ?? (config.sources.maps_no_website ? "maps_no_website" : "ai_upgrade")

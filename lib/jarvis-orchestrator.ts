@@ -18,6 +18,8 @@ import {
 import { encrypt, isCryptoConfigured } from "@/lib/crypto"
 import { describeLlm } from "@/lib/llm"
 import { TASK_TIERS } from "@/lib/model-router"
+import { AGENT_BY_KEY } from "@/lib/agent-registry"
+import { renameAgent, setAgentPaused, addEdge, deleteEdge } from "@/lib/agent-graph-mutations"
 
 // =============================================================================
 // Jarvis orchestrator tools — the "god-mode" layer.
@@ -464,6 +466,85 @@ export function orchestratorTools(userId: string) {
           await logAction(userId, "browse_page", `FAILED ${url}: ${msg.slice(0, 200)}`, { url, error: msg.slice(0, 300) })
           return { error: msg }
         }
+      },
+    }),
+
+    // --- Agent graph (shared with the Agent Playground — one source of truth) --
+
+    graph_overview: tool({
+      description:
+        "Read the live agent graph shown in the Agent Playground: every agent's unique name, machine key, role, tier, group, orchestrator flag, paused state, and current health status (green/yellow/red). Use before rewiring, pausing, or renaming agents. Changes you make with the other graph tools appear in the Playground automatically.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        // Read the same overlay + status the Playground renders (userId-explicit).
+        const { getOverlay, mergeGraph } = await import("@/lib/agent-graph")
+        const { getStatusSources, blockedReasons, agentStatus } = await import("@/lib/agent-status")
+        const [overlay, sources] = await Promise.all([getOverlay(userId), getStatusSources(userId)])
+        const graph = mergeGraph(overlay)
+        const blocked = blockedReasons()
+        return {
+          agents: graph.agents.map((a) => ({
+            key: a.key,
+            name: a.displayName,
+            role: a.role,
+            tier: a.tier,
+            group: a.group,
+            orchestrator: Boolean(a.isOrchestrator),
+            paused: a.paused,
+            status: a.paused ? "idle (paused)" : agentStatus(a, sources, blocked).status,
+          })),
+          handoffs: graph.edges.map((e) => `${e.source} → ${e.target} (${e.kind})`),
+        }
+      },
+    }),
+
+    set_agent_paused: tool({
+      description:
+        "Pause or resume an agent by its machine key (from graph_overview). Paused agents are excluded from orchestration at dispatch time and dim in the Playground. Load-bearing agents cannot be paused.",
+      inputSchema: z.object({
+        agentKey: z.string(),
+        paused: z.boolean(),
+      }),
+      execute: async ({ agentKey, paused }) => {
+        if (!AGENT_BY_KEY[agentKey] && !agentKey.startsWith("custom.")) return { error: `Unknown agent key: ${agentKey}` }
+        const r = await setAgentPaused(userId, agentKey, paused)
+        await logAction(userId, "set_agent_paused", `${paused ? "Paused" : "Resumed"} ${agentKey}`, { agentKey, paused, ok: r.ok })
+        return r
+      },
+    }),
+
+    rewire_agents: tool({
+      description:
+        "Add a directional handoff edge between two agents (source → target) in the shared agent graph. Use to route one agent's output into another — e.g. split a chain by pointing a script agent at a different prompt-building agent. Reflects immediately in the Playground.",
+      inputSchema: z.object({
+        source: z.string().describe("source agent key"),
+        target: z.string().describe("target agent key"),
+        label: z.string().optional(),
+      }),
+      execute: async ({ source, target, label }) => {
+        const r = await addEdge(userId, source, target, label)
+        await logAction(userId, "rewire_agents", `Wired ${source} → ${target}`, { source, target, ok: r.ok })
+        return r
+      },
+    }),
+
+    unwire_agents: tool({
+      description: "Remove a handoff edge by its id (edge ids come from graph_overview handoffs / the Playground).",
+      inputSchema: z.object({ edgeId: z.string() }),
+      execute: async ({ edgeId }) => {
+        const r = await deleteEdge(userId, edgeId)
+        await logAction(userId, "unwire_agents", `Removed edge ${edgeId}`, { edgeId })
+        return r
+      },
+    }),
+
+    rename_agent: tool({
+      description: "Give an agent a new unique display name in the shared graph (cosmetic identity, machine key unchanged).",
+      inputSchema: z.object({ agentKey: z.string(), name: z.string().min(1).max(40) }),
+      execute: async ({ agentKey, name }) => {
+        const r = await renameAgent(userId, agentKey, name)
+        await logAction(userId, "rename_agent", `Renamed ${agentKey} → "${name}"`, { agentKey, name })
+        return r
       },
     }),
   }
