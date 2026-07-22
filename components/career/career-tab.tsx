@@ -7,6 +7,7 @@ import { ResumeStudio } from "@/components/career/resume-studio"
 import { StoryBank } from "@/components/career/story-bank"
 import { ResearchPanel } from "@/components/career/research-panel"
 import { ScannerPanel } from "@/components/career/scanner-panel"
+import { JobHuntPanel } from "@/components/career/jobhunt-panel"
 import { CareerSettingsPanel } from "@/components/career/career-settings-panel"
 import type { JobApplication, CareerSettings, InterviewStory, CompanyResearchNote, Resume } from "@/lib/types"
 
@@ -51,6 +52,7 @@ export function CareerTab({ jobs, settings, stories, research, masterResumes }: 
       <Tabs defaultValue="pipeline">
         <TabsList className="flex-wrap">
           <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
+          <TabsTrigger value="autoapply">Auto-Apply</TabsTrigger>
           <TabsTrigger value="scanner">Scanner</TabsTrigger>
           <TabsTrigger value="resumes">Resumes</TabsTrigger>
           <TabsTrigger value="stories">Story Bank</TabsTrigger>
@@ -59,6 +61,9 @@ export function CareerTab({ jobs, settings, stories, research, masterResumes }: 
         </TabsList>
         <TabsContent value="pipeline">
           <JobPipeline jobs={jobs} hasResume={hasResume} />
+        </TabsContent>
+        <TabsContent value="autoapply">
+          <JobHuntPanel />
         </TabsContent>
         <TabsContent value="scanner">
           <ScannerPanel />

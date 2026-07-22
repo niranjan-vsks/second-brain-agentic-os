@@ -447,6 +447,9 @@ export const jobApplications = pgTable("job_applications", {
   evaluationReportId: text("evaluationReportId"),
   bypassApproval: boolean("bypassApproval").notNull().default(false),
   autoSubmitted: boolean("autoSubmitted").notNull().default(false),
+  // Job-Hunt engine shared data packet (Nodes 2-4): tracking id, confirmation
+  // screenshot, hiring manager (Apollo/Hunter), outreach drafts + status.
+  jobhunt: jsonb("jobhunt").notNull().default({}),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 })

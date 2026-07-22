@@ -53,6 +53,9 @@ export interface AgentDef {
     | "career_scan"
     | "automation"
     | "jobhunt"
+    | "jobhunt_enricher"
+    | "jobhunt_applicant"
+    | "jobhunt_emissary"
     | "static"
   /** AgentKey in lib/config.ts AGENT_KEYS whose directive/skills apply (if any). */
   overrideKey?: string
@@ -339,7 +342,7 @@ export const BASE_AGENTS: AgentDef[] = [
     role: "Node 2 — surgical resume tailoring + headless-browser application; returns Job ID + confirmation screenshot",
     tier: "heavy",
     group: "jobhunt",
-    statusSource: "static",
+    statusSource: "jobhunt_applicant",
   },
   {
     key: "jobhunt.enricher",
@@ -347,7 +350,7 @@ export const BASE_AGENTS: AgentDef[] = [
     role: "Node 3 — Apollo→Hunter waterfall to find the hiring manager + deep company research",
     tier: "standard",
     group: "jobhunt",
-    statusSource: "static",
+    statusSource: "jobhunt_enricher",
   },
   {
     key: "jobhunt.emissary",
@@ -355,7 +358,7 @@ export const BASE_AGENTS: AgentDef[] = [
     role: "Node 4 — synchronized cold outreach (email + LinkedIn), humanized, minutes after apply",
     tier: "standard",
     group: "jobhunt",
-    statusSource: "static",
+    statusSource: "jobhunt_emissary",
   },
 ]
 

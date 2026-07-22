@@ -29,6 +29,13 @@
       "when": 1784752384844,
       "tag": "0003_zippy_runaways",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1784754948102,
+      "tag": "0004_hot_doctor_spectrum",
+      "breakpoints": true
     }
   ]
 }

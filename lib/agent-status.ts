@@ -56,7 +56,16 @@ export async function getStatusSources(userId: string): Promise<StatusMap> {
        (SELECT "updatedAt" FROM linkedin_posts WHERE "userId" = $1 ORDER BY "updatedAt" DESC LIMIT 1) AS linkedin_at,
        (SELECT status FROM job_hunt_runs WHERE "userId" = $1 AND node = 'sourcer' ORDER BY "createdAt" DESC LIMIT 1) AS jobhunt_status,
        (SELECT detail FROM job_hunt_runs WHERE "userId" = $1 AND node = 'sourcer' ORDER BY "createdAt" DESC LIMIT 1) AS jobhunt_detail,
-       (SELECT "createdAt" FROM job_hunt_runs WHERE "userId" = $1 AND node = 'sourcer' ORDER BY "createdAt" DESC LIMIT 1) AS jobhunt_at`,
+       (SELECT "createdAt" FROM job_hunt_runs WHERE "userId" = $1 AND node = 'sourcer' ORDER BY "createdAt" DESC LIMIT 1) AS jobhunt_at,
+       (SELECT status FROM job_hunt_runs WHERE "userId" = $1 AND node = 'enricher' ORDER BY "createdAt" DESC LIMIT 1) AS jhe_status,
+       (SELECT detail FROM job_hunt_runs WHERE "userId" = $1 AND node = 'enricher' ORDER BY "createdAt" DESC LIMIT 1) AS jhe_detail,
+       (SELECT "createdAt" FROM job_hunt_runs WHERE "userId" = $1 AND node = 'enricher' ORDER BY "createdAt" DESC LIMIT 1) AS jhe_at,
+       (SELECT status FROM job_hunt_runs WHERE "userId" = $1 AND node = 'applicant' ORDER BY "createdAt" DESC LIMIT 1) AS jha_status,
+       (SELECT detail FROM job_hunt_runs WHERE "userId" = $1 AND node = 'applicant' ORDER BY "createdAt" DESC LIMIT 1) AS jha_detail,
+       (SELECT "createdAt" FROM job_hunt_runs WHERE "userId" = $1 AND node = 'applicant' ORDER BY "createdAt" DESC LIMIT 1) AS jha_at,
+       (SELECT status FROM job_hunt_runs WHERE "userId" = $1 AND node = 'emissary' ORDER BY "createdAt" DESC LIMIT 1) AS jhm_status,
+       (SELECT detail FROM job_hunt_runs WHERE "userId" = $1 AND node = 'emissary' ORDER BY "createdAt" DESC LIMIT 1) AS jhm_detail,
+       (SELECT "createdAt" FROM job_hunt_runs WHERE "userId" = $1 AND node = 'emissary' ORDER BY "createdAt" DESC LIMIT 1) AS jhm_at`,
     [userId],
   )
   const r = q.rows[0] ?? {}
@@ -139,6 +148,21 @@ export async function getStatusSources(userId: string): Promise<StatusMap> {
       status: classify(r.jobhunt_status, { completed: "success", running: "pending", failed: "error" }),
       detail: r.jobhunt_detail || (r.jobhunt_status ? `sourcer: ${r.jobhunt_status}` : IDLE.detail),
       lastAt: iso(r.jobhunt_at),
+    },
+    jobhunt_enricher: {
+      status: classify(r.jhe_status, { completed: "success", running: "pending", failed: "error" }),
+      detail: r.jhe_detail || IDLE.detail,
+      lastAt: iso(r.jhe_at),
+    },
+    jobhunt_applicant: {
+      status: classify(r.jha_status, { completed: "success", running: "pending", failed: "error" }),
+      detail: r.jha_detail || IDLE.detail,
+      lastAt: iso(r.jha_at),
+    },
+    jobhunt_emissary: {
+      status: classify(r.jhm_status, { completed: "success", running: "pending", failed: "error" }),
+      detail: r.jhm_detail || IDLE.detail,
+      lastAt: iso(r.jhm_at),
     },
     static: IDLE,
   }

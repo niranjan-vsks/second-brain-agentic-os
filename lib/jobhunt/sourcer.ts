@@ -18,7 +18,7 @@ import { randomUUID } from "crypto"
 import { db } from "@/lib/db"
 import { jobApplications, scanHistory, jobHuntRuns } from "@/lib/db/schema"
 import { and, eq } from "drizzle-orm"
-import { fetchPage } from "@/lib/search"
+import { fetchPage, webSearch, isSearchConfigured } from "@/lib/search"
 import { getConfig, JOBHUNT_DEFAULTS, type JobHuntConfig } from "@/lib/config"
 import { getScannerConfig, DEFAULT_TITLE_FILTERS, type TitleFilters } from "@/lib/career/scanner"
 
@@ -88,10 +88,14 @@ export async function runSourcer(userId: string, trigger: "manual" | "cron" | "j
     await db.update(jobHuntRuns).set({ status: "completed", detail: "disabled" }).where(eq(jobHuntRuns.id, runId))
     return result
   }
-  if (cfg.boards.length === 0) {
+  const searchOn = await isSearchConfigured(userId)
+  if (cfg.boards.length === 0 && !searchOn) {
     await db
       .update(jobHuntRuns)
-      .set({ status: "completed", detail: "no boards configured — add career pages/boards to jobhunt config" })
+      .set({
+        status: "completed",
+        detail: "no discovery source — add a Tavily/Brave/Serper key (internet-wide search) or seed boards",
+      })
       .where(eq(jobHuntRuns.id, runId))
     return result
   }
@@ -105,6 +109,80 @@ export async function runSourcer(userId: string, trigger: "manual" | "cron" | "j
     filters = DEFAULT_TITLE_FILTERS
   }
 
+  // Stage one candidate through the shared 3-way dedup → job_applications.
+  const stage = async (c: Candidate, sourceTag: string): Promise<void> => {
+    const [seen] = await db
+      .select({ id: scanHistory.id })
+      .from(scanHistory)
+      .where(and(eq(scanHistory.userId, userId), eq(scanHistory.url, c.url)))
+      .limit(1)
+    if (seen) {
+      result.skipped++
+      return
+    }
+    const existing = await db
+      .select({ roleTitle: jobApplications.roleTitle })
+      .from(jobApplications)
+      .where(and(eq(jobApplications.userId, userId), eq(jobApplications.company, c.board)))
+    const dup = existing.some((r) => norm(r.roleTitle) === norm(c.title))
+    await db.insert(scanHistory).values({
+      id: randomUUID(),
+      userId,
+      url: c.url,
+      portalSource: sourceTag,
+      status: dup ? "skipped_dup" : "added",
+    })
+    if (dup) {
+      result.skipped++
+      return
+    }
+    await db.insert(jobApplications).values({
+      id: randomUUID(),
+      userId,
+      company: c.board.slice(0, 120),
+      roleTitle: c.title.slice(0, 200),
+      jobUrl: c.url,
+      portalSource: sourceTag,
+      status: "discovered",
+    })
+    result.staged++
+  }
+
+  // --- Pass A: internet-wide discovery via web search (the primary source) ---
+  // The whole point: cast wide across job boards + company career pages + hidden
+  // listings, not just the seed boards. Seed boards below are a headstart.
+  if (await isSearchConfigured(userId)) {
+    const locs = cfg.locations.split(",").map((l) => l.trim()).filter(Boolean)
+    const primaryLoc = locs[0] ?? "remote"
+    // Bounded query set: top keywords × the primary location, plus a remote sweep.
+    const queries: string[] = []
+    for (const kw of keywords.slice(0, 4)) {
+      queries.push(`${kw} job ${primaryLoc} apply`)
+      queries.push(`${kw} careers hiring ${primaryLoc}`)
+    }
+    queries.push(`${keywords[0] ?? "AI Engineer"} remote job apply`)
+    for (const q of queries.slice(0, 9)) {
+      try {
+        const results = await webSearch(userId, q, 6)
+        result.found += results.length
+        for (const r of results) {
+          if (!titlePasses(r.title, keywords, filters)) continue
+          let host = "web"
+          try {
+            host = new URL(r.url).hostname.replace(/^www\./, "")
+          } catch {
+            host = "web"
+          }
+          await stage({ title: r.title, url: r.url, board: host }, `sourcer:search`)
+          if (result.staged >= cfg.maxPerBoard * 4) break
+        }
+      } catch (e) {
+        result.errors.push(`search "${q}": ${e instanceof Error ? e.message : "failed"}`)
+      }
+    }
+  }
+
+  // --- Pass B: crawl the operator's seed boards (headstart) ------------------
   for (const board of cfg.boards.slice(0, 20)) {
     result.boards++
     let markdown = ""
@@ -116,48 +194,7 @@ export async function runSourcer(userId: string, trigger: "manual" | "cron" | "j
     }
     const candidates = extractJobLinks(markdown, board.url, board.name, keywords, filters).slice(0, cfg.maxPerBoard)
     result.found += candidates.length
-
-    for (const c of candidates) {
-      // Dedup 1: URL seen before (scan_history shared with the ATS scanner)
-      const [seen] = await db
-        .select({ id: scanHistory.id })
-        .from(scanHistory)
-        .where(and(eq(scanHistory.userId, userId), eq(scanHistory.url, c.url)))
-        .limit(1)
-      if (seen) {
-        result.skipped++
-        continue
-      }
-      // Dedup 2: same board(company) + normalized role already in pipeline
-      const existing = await db
-        .select({ roleTitle: jobApplications.roleTitle })
-        .from(jobApplications)
-        .where(and(eq(jobApplications.userId, userId), eq(jobApplications.company, c.board)))
-      const dup = existing.some((r) => norm(r.roleTitle) === norm(c.title))
-
-      await db.insert(scanHistory).values({
-        id: randomUUID(),
-        userId,
-        url: c.url,
-        portalSource: `sourcer:${c.board}`,
-        status: dup ? "skipped_dup" : "added",
-      })
-      if (dup) {
-        result.skipped++
-        continue
-      }
-
-      await db.insert(jobApplications).values({
-        id: randomUUID(),
-        userId,
-        company: c.board,
-        roleTitle: c.title.slice(0, 200),
-        jobUrl: c.url,
-        portalSource: `sourcer:${c.board}`,
-        status: "discovered",
-      })
-      result.staged++
-    }
+    for (const c of candidates) await stage(c, `sourcer:${c.board}`)
   }
 
   await db

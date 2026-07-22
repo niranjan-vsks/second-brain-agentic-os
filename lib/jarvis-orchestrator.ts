@@ -259,7 +259,7 @@ export function orchestratorTools(userId: string) {
       description:
         "Trigger an OS workflow right now. Workflows: leadgen_discovery (run the lead-gen agent: discover + AI-qualify prospects per current config), career_scan (zero-token ATS scan of tracked companies for new matching roles), jobhunt_source (Node 1 Sourcer: crawl the configured career pages/job boards for matching roles and stage them into the Career pipeline).",
       inputSchema: z.object({
-        workflow: z.enum(["leadgen_discovery", "career_scan", "jobhunt_source"]),
+        workflow: z.enum(["leadgen_discovery", "career_scan", "jobhunt_source", "jobhunt_cycle"]),
       }),
       execute: async ({ workflow }) => {
         try {
@@ -273,6 +273,12 @@ export function orchestratorTools(userId: string) {
             const { runSourcer } = await import("@/lib/jobhunt/sourcer")
             const result = await runSourcer(userId, "jarvis")
             await logAction(userId, "trigger_workflow", `Ran jobhunt_source: ${result.staged} staged`, { workflow, ...result })
+            return { workflow, ...result }
+          }
+          if (workflow === "jobhunt_cycle") {
+            const { runJobHuntCycle } = await import("@/lib/jobhunt/orchestrator")
+            const result = await runJobHuntCycle(userId, "jarvis")
+            await logAction(userId, "trigger_workflow", `Ran jobhunt_cycle: ${result.processed} processed`, { workflow, processed: result.processed })
             return { workflow, ...result }
           }
           const { runZeroTokenScan } = await import("@/lib/career/scanner")

@@ -94,6 +94,24 @@ export const KEY_PROVIDERS: Record<
     docsUrl: "https://docs.setu.co/data/account-aggregator",
     purpose: "Account Aggregator seam for read-only bank data sync into Money OS — requires Setu onboarding; stub until wired",
   },
+  apollo: {
+    label: "Apollo.io",
+    envVar: "APOLLO_API_KEY",
+    docsUrl: "https://apolloio.github.io/apollo-api-docs/",
+    purpose: "Job-Hunt Enricher (Node 3) — find the hiring manager by company domain + role",
+  },
+  hunter: {
+    label: "Hunter.io",
+    envVar: "HUNTER_API_KEY",
+    docsUrl: "https://hunter.io/api-documentation",
+    purpose: "Job-Hunt Enricher fallback — corporate email pattern + email finder",
+  },
+  resend: {
+    label: "Resend (email send)",
+    envVar: "RESEND_API_KEY",
+    docsUrl: "https://resend.com/docs",
+    purpose: "Job-Hunt Emissary (Node 4) — actually sends the cold email when autonomy = auto",
+  },
 }
 
 /**
