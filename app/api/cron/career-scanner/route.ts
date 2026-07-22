@@ -1,11 +1,17 @@
 /**
- * Career zero-token scanner cron (doc 08 Task 2) — polls ATS APIs directly for
- * every user with tracked companies configured. No LLM, no browser. Level 2 of
- * the 3-level discovery strategy (doc 09 §scan.md).
+ * Career discovery cron — two zero-token passes per user:
+ *   1. ATS scanner (runZeroTokenScan): direct ATS JSON APIs (doc 09 §scan.md).
+ *   2. Job-Hunt Sourcer (Node 1): crawls the configured career pages/job boards
+ *      via crawl4ai and stages matches into the same Career pipeline. No-ops
+ *      unless the user set jobhunt.enabled. Folded here to avoid a new Hobby
+ *      cron slot.
+ * No LLM, no cost. Level 2 of the 3-level discovery strategy.
  */
 import { db } from "@/lib/db"
-import { careerSettings } from "@/lib/db/schema"
+import { careerSettings, appConfig } from "@/lib/db/schema"
+import { eq } from "drizzle-orm"
 import { runZeroTokenScan } from "@/lib/career/scanner"
+import { runSourcer } from "@/lib/jobhunt/sourcer"
 
 export const maxDuration = 300
 
@@ -24,5 +30,17 @@ export async function GET(req: Request) {
       results[userId] = { error: e instanceof Error ? e.message : "scan failed" }
     }
   }
-  return Response.json({ users: allSettings.length, results })
+
+  // Sourcer pass — every user who saved a jobhunt config (runSourcer self-gates on enabled).
+  const jobhuntUsers = await db.select({ userId: appConfig.userId }).from(appConfig).where(eq(appConfig.key, "jobhunt"))
+  const sourced: Record<string, unknown> = {}
+  for (const { userId } of jobhuntUsers) {
+    try {
+      sourced[userId] = await runSourcer(userId, "cron")
+    } catch (e) {
+      sourced[userId] = { error: e instanceof Error ? e.message : "sourcer failed" }
+    }
+  }
+
+  return Response.json({ users: allSettings.length, results, sourcer: sourced })
 }

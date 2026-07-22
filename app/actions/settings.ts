@@ -34,7 +34,7 @@ async function getUserId(): Promise<string> {
 
 export async function saveConfigAction(key: string, value: Record<string, unknown>) {
   const userId = await getUserId()
-  const allowed = new Set(["leadgen", "funnels.meta_ads", "general", "connections"])
+  const allowed = new Set(["leadgen", "funnels.meta_ads", "general", "connections", "jobhunt"])
   if (!allowed.has(key)) throw new Error("Unknown config key")
   const existing = await db
     .select()

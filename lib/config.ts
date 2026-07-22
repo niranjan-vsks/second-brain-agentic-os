@@ -186,6 +186,29 @@ export const LEADGEN_DEFAULTS: LeadgenConfig = {
   autoPromote: false,
 }
 
+// --- Job-Hunt engine config (Node 1 Sourcer curation criteria) ----------------
+export interface JobHuntConfig {
+  /** Master switch: cron sourcing runs only when true. */
+  enabled: boolean
+  /** Career pages / job boards / remote boards to crawl (name + URL). */
+  boards: { name: string; url: string }[]
+  /** Role title keywords a listing must match (comma-separated). Falls back to the
+   *  career scanner's title filters when empty. */
+  roleKeywords: string
+  /** Preferred locations / "remote" (comma-separated); informational + light filter. */
+  locations: string
+  /** Max new listings to stage per board per run (cost + noise guardrail). */
+  maxPerBoard: number
+}
+
+export const JOBHUNT_DEFAULTS: JobHuntConfig = {
+  enabled: false,
+  boards: [],
+  roleKeywords: "Forward Deployed, FDE, AI Engineer, Solutions Engineer, GenAI, Agentic, Applied AI, LLM",
+  locations: "Remote, Bengaluru, Hyderabad",
+  maxPerBoard: 15,
+}
+
 export interface MetaAdsFunnelConfig {
   enabled: boolean
   adAccountId: string

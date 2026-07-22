@@ -14,6 +14,7 @@ import {
   LEADGEN_DEFAULTS,
   GENERAL_DEFAULTS,
   META_ADS_DEFAULTS,
+  JOBHUNT_DEFAULTS,
 } from "@/lib/config"
 import { encrypt, isCryptoConfigured } from "@/lib/crypto"
 import { describeLlm } from "@/lib/llm"
@@ -52,6 +53,10 @@ const CONFIG_REGISTRY: Record<string, { defaults: Record<string, unknown>; descr
   "funnels.meta_ads": {
     defaults: META_ADS_DEFAULTS as unknown as Record<string, unknown>,
     description: "Meta Ads funnel seam: enabled, adAccountId, pageId, dailyBudgetINR, notes",
+  },
+  jobhunt: {
+    defaults: JOBHUNT_DEFAULTS as unknown as Record<string, unknown>,
+    description: "Job-Hunt engine Sourcer: enabled, boards (name+url list), roleKeywords, locations, maxPerBoard",
   },
 }
 
@@ -252,9 +257,9 @@ export function orchestratorTools(userId: string) {
 
     trigger_workflow: tool({
       description:
-        "Trigger an OS workflow right now. Workflows: leadgen_discovery (run the lead-gen agent: discover + AI-qualify prospects per current config), career_scan (zero-token ATS scan of tracked companies for new matching roles).",
+        "Trigger an OS workflow right now. Workflows: leadgen_discovery (run the lead-gen agent: discover + AI-qualify prospects per current config), career_scan (zero-token ATS scan of tracked companies for new matching roles), jobhunt_source (Node 1 Sourcer: crawl the configured career pages/job boards for matching roles and stage them into the Career pipeline).",
       inputSchema: z.object({
-        workflow: z.enum(["leadgen_discovery", "career_scan"]),
+        workflow: z.enum(["leadgen_discovery", "career_scan", "jobhunt_source"]),
       }),
       execute: async ({ workflow }) => {
         try {
@@ -262,6 +267,12 @@ export function orchestratorTools(userId: string) {
             const { runLeadgenAgent } = await import("@/lib/leadgen")
             const result = await runLeadgenAgent(userId, "manual")
             await logAction(userId, "trigger_workflow", `Ran leadgen_discovery: ${result.message}`, { workflow, ...result })
+            return { workflow, ...result }
+          }
+          if (workflow === "jobhunt_source") {
+            const { runSourcer } = await import("@/lib/jobhunt/sourcer")
+            const result = await runSourcer(userId, "jarvis")
+            await logAction(userId, "trigger_workflow", `Ran jobhunt_source: ${result.staged} staged`, { workflow, ...result })
             return { workflow, ...result }
           }
           const { runZeroTokenScan } = await import("@/lib/career/scanner")

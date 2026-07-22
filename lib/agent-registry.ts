@@ -52,6 +52,7 @@ export interface AgentDef {
     | "career"
     | "career_scan"
     | "automation"
+    | "jobhunt"
     | "static"
   /** AgentKey in lib/config.ts AGENT_KEYS whose directive/skills apply (if any). */
   overrideKey?: string
@@ -330,7 +331,7 @@ export const BASE_AGENTS: AgentDef[] = [
     role: "Node 1 — sources & curates high-fit roles 24/7 via Crawl4AI across portals + hidden listings",
     tier: "deterministic",
     group: "jobhunt",
-    statusSource: "static",
+    statusSource: "jobhunt",
   },
   {
     key: "jobhunt.applicant",

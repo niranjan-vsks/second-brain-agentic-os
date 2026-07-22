@@ -53,7 +53,10 @@ export async function getStatusSources(userId: string): Promise<StatusMap> {
        (SELECT detail FROM automation_runs WHERE "userId" = $1 ORDER BY "createdAt" DESC LIMIT 1) AS automation_detail,
        (SELECT "createdAt" FROM automation_runs WHERE "userId" = $1 ORDER BY "createdAt" DESC LIMIT 1) AS automation_at,
        (SELECT status FROM linkedin_posts WHERE "userId" = $1 ORDER BY "updatedAt" DESC LIMIT 1) AS linkedin_status,
-       (SELECT "updatedAt" FROM linkedin_posts WHERE "userId" = $1 ORDER BY "updatedAt" DESC LIMIT 1) AS linkedin_at`,
+       (SELECT "updatedAt" FROM linkedin_posts WHERE "userId" = $1 ORDER BY "updatedAt" DESC LIMIT 1) AS linkedin_at,
+       (SELECT status FROM job_hunt_runs WHERE "userId" = $1 AND node = 'sourcer' ORDER BY "createdAt" DESC LIMIT 1) AS jobhunt_status,
+       (SELECT detail FROM job_hunt_runs WHERE "userId" = $1 AND node = 'sourcer' ORDER BY "createdAt" DESC LIMIT 1) AS jobhunt_detail,
+       (SELECT "createdAt" FROM job_hunt_runs WHERE "userId" = $1 AND node = 'sourcer' ORDER BY "createdAt" DESC LIMIT 1) AS jobhunt_at`,
     [userId],
   )
   const r = q.rows[0] ?? {}
@@ -131,6 +134,11 @@ export async function getStatusSources(userId: string): Promise<StatusMap> {
       }),
       detail: r.linkedin_status ? `latest post: ${r.linkedin_status}` : IDLE.detail,
       lastAt: iso(r.linkedin_at),
+    },
+    jobhunt: {
+      status: classify(r.jobhunt_status, { completed: "success", running: "pending", failed: "error" }),
+      detail: r.jobhunt_detail || (r.jobhunt_status ? `sourcer: ${r.jobhunt_status}` : IDLE.detail),
+      lastAt: iso(r.jobhunt_at),
     },
     static: IDLE,
   }

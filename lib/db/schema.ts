@@ -748,6 +748,20 @@ export const automationRuns = pgTable("automation_runs", {
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
+// job_hunt_runs: audit + live-status feed for the 4-node Job-Hunt engine
+// (Sourcer/Applicant/Enricher/Emissary). One row per node execution; the Agent
+// Playground reads the latest row per node for its glow. Reusable across nodes.
+export const jobHuntRuns = pgTable("job_hunt_runs", {
+  id: text("id").primaryKey(),
+  userId: text("userId").notNull(),
+  node: text("node").notNull(), // sourcer | applicant | enricher | emissary
+  trigger: text("trigger").notNull().default("manual"), // manual | cron | jarvis
+  status: text("status").notNull().default("running"), // running | completed | failed
+  found: integer("found").notNull().default(0),
+  detail: text("detail").notNull().default(""),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+})
+
 // secret_access_log: audit trail for the secrets-hardening pass — every read,
 // write, or delete of a vaulted API key is recorded here (provider + action +
 // caller only, NEVER the secret value). Closes the real gap AES-in-Postgres
