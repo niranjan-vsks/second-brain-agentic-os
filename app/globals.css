@@ -170,11 +170,60 @@
     animation: node-pulse 1.4s var(--ease-out) infinite;
   }
   .node-glow-idle {
-    opacity: 0.62;
+    opacity: 0.82;
+    border-color: var(--border);
+    box-shadow:
+      0 1px 0 oklch(1 0 0 / 5%) inset,
+      0 8px 24px -14px oklch(0 0 0 / 55%);
   }
   @keyframes node-pulse {
     0%, 100% { filter: brightness(1); }
-    50% { filter: brightness(1.35); }
+    50% { filter: brightness(1.3); }
+  }
+
+  /* Sci-fi "agent is speaking" — expanding glow ring + zoom pulse + brightness.
+     Applied on the node wrapper; the ::before draws the pulsing halo. */
+  .node-speaking {
+    position: relative;
+    z-index: 5;
+    opacity: 1 !important;
+    border-color: color-mix(in oklch, var(--primary) 70%, transparent) !important;
+    animation: node-speak-zoom 1.1s var(--ease-out) infinite;
+  }
+  .node-speaking::before {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border-radius: inherit;
+    pointer-events: none;
+    box-shadow:
+      0 0 0 1px color-mix(in oklch, var(--primary) 55%, transparent),
+      0 0 26px 2px color-mix(in oklch, var(--primary) 50%, transparent);
+    animation: node-speak-ring 1.1s var(--ease-out) infinite;
+  }
+  @keyframes node-speak-zoom {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.045); filter: brightness(1.28); }
+  }
+  @keyframes node-speak-ring {
+    0% { opacity: 0.9; transform: scale(1); }
+    70% { opacity: 0; transform: scale(1.14); }
+    100% { opacity: 0; transform: scale(1.14); }
+  }
+
+  /* Voice waveform bars (shown on a speaking node) */
+  .voice-wave { display: inline-flex; align-items: center; gap: 2px; height: 12px; }
+  .voice-wave > span {
+    width: 2px; height: 100%; border-radius: 2px;
+    background: var(--primary);
+    animation: voice-bar 0.9s var(--ease-out) infinite;
+  }
+  .voice-wave > span:nth-child(2) { animation-delay: 0.15s; }
+  .voice-wave > span:nth-child(3) { animation-delay: 0.3s; }
+  .voice-wave > span:nth-child(4) { animation-delay: 0.45s; }
+  @keyframes voice-bar {
+    0%, 100% { transform: scaleY(0.35); opacity: 0.6; }
+    50% { transform: scaleY(1); opacity: 1; }
   }
 
   /* Glossy node face — soft top highlight over the card surface */

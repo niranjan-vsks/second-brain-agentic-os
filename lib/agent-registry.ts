@@ -27,6 +27,7 @@ export type AgentGroup =
   | "career"
   | "freelance"
   | "arsenal"
+  | "jobhunt"
 
 export interface AgentDef {
   /** Machine identifier — stable, matches TASK_TIERS keys where an LLM task exists. */
@@ -78,6 +79,7 @@ export const AGENT_GROUPS: AgentGroupDef[] = [
   { id: "career", label: "Career Intelligence" },
   { id: "freelance", label: "Freelance" },
   { id: "arsenal", label: "Arsenal" },
+  { id: "jobhunt", label: "Job-Hunt Engine" },
 ]
 
 export const BASE_AGENTS: AgentDef[] = [
@@ -318,6 +320,42 @@ export const BASE_AGENTS: AgentDef[] = [
     group: "arsenal",
     statusSource: "automation",
   },
+
+  // ---- Job-Hunt Engine (planned subsystem — see Architecture Script) ---------
+  // Rendered on the canvas so the 4-node autopilot architecture is visible.
+  // statusSource "static" until each node's backend + audit table lands.
+  {
+    key: "jobhunt.sourcer",
+    displayName: "Sourcer",
+    role: "Node 1 — sources & curates high-fit roles 24/7 via Crawl4AI across portals + hidden listings",
+    tier: "deterministic",
+    group: "jobhunt",
+    statusSource: "static",
+  },
+  {
+    key: "jobhunt.applicant",
+    displayName: "Applicant",
+    role: "Node 2 — surgical resume tailoring + headless-browser application; returns Job ID + confirmation screenshot",
+    tier: "heavy",
+    group: "jobhunt",
+    statusSource: "static",
+  },
+  {
+    key: "jobhunt.enricher",
+    displayName: "Enricher",
+    role: "Node 3 — Apollo→Hunter waterfall to find the hiring manager + deep company research",
+    tier: "standard",
+    group: "jobhunt",
+    statusSource: "static",
+  },
+  {
+    key: "jobhunt.emissary",
+    displayName: "Emissary",
+    role: "Node 4 — synchronized cold outreach (email + LinkedIn), humanized, minutes after apply",
+    tier: "standard",
+    group: "jobhunt",
+    statusSource: "static",
+  },
 ]
 
 export const BASE_EDGES: AgentEdgeDef[] = [
@@ -347,6 +385,11 @@ export const BASE_EDGES: AgentEdgeDef[] = [
   { id: "e-jv-5", source: "os_chat.jarvis", target: "linkedin.compose_post", kind: "control" },
   { id: "e-jv-6", source: "os_chat.jarvis", target: "ads.creative", kind: "control" },
   { id: "e-jv-7", source: "os_chat.jarvis", target: "arsenal.analyze_automation", kind: "control" },
+  // Job-Hunt engine: sourced role → apply → enrich → outreach (shared data packet)
+  { id: "e-jh-1", source: "jobhunt.sourcer", target: "jobhunt.applicant", kind: "handoff", label: "curated role" },
+  { id: "e-jh-2", source: "jobhunt.applicant", target: "jobhunt.enricher", kind: "handoff", label: "job id + org" },
+  { id: "e-jh-3", source: "jobhunt.enricher", target: "jobhunt.emissary", kind: "handoff", label: "manager + intel" },
+  { id: "e-jh-orch", source: "os_chat.jarvis", target: "jobhunt.sourcer", kind: "control", label: "boots + feeds PRD" },
 ]
 
 export const AGENT_BY_KEY: Record<string, AgentDef> = Object.fromEntries(BASE_AGENTS.map((a) => [a.key, a]))

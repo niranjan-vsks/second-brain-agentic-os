@@ -40,12 +40,14 @@ import {
   deleteEdgeAction,
   resetGraphAction,
 } from "@/app/actions/playground"
-import { X, Plus, RotateCcw, Loader2, Crown, Trash2, Pause, Play, CircleDot, ExternalLink } from "lucide-react"
+import { speakLineForAgent, synthesizeSpeech } from "@/app/actions/agent-voice"
+import { speakAsAgent, cancelSpeech, playBase64Audio } from "@/lib/speak-client"
+import { X, Plus, RotateCcw, Loader2, Crown, Trash2, Pause, Play, CircleDot, ExternalLink, Volume2, Radio, MessageCircle } from "lucide-react"
 
 type Graph = Awaited<ReturnType<typeof getPlaygroundGraph>>
 type Inspector = Awaited<ReturnType<typeof getAgentInspector>>
 
-const GROUP_ORDER = ["core", "linkedin", "youtube", "leadgen", "career", "freelance", "arsenal"] as const
+const GROUP_ORDER = ["core", "linkedin", "youtube", "leadgen", "career", "freelance", "arsenal", "jobhunt"] as const
 const LANE_W = 224
 const BAND_H = 150
 const BAND_GAP = 56
@@ -70,12 +72,53 @@ export function PlaygroundTab() {
   const [inspector, setInspector] = useState<Inspector | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [toast, setToast] = useState("")
+  const [speakingKey, setSpeakingKey] = useState<string | null>(null)
+  const [transcript, setTranscript] = useState<{ key: string; name: string; line: string } | null>(null)
+  const [introducing, setIntroducing] = useState(false)
   const positionsRef = useRef<Record<string, { x: number; y: number }>>({})
+  const introStopRef = useRef(false)
 
   const flash = useCallback((msg: string) => {
     setToast(msg)
     setTimeout(() => setToast(""), 3200)
   }, [])
+
+  // Make one agent "speak": write its line (Jarvis, in the agent's voice) and
+  // play it with that agent's distinct voice + speaking animation. Returns when
+  // audio finishes. Prefers the OmniVoice seam, falls back to browser TTS.
+  const speakAgent = useCallback(
+    async (key: string, tier: string, mode: "introduce" | "ask", question?: string): Promise<void> => {
+      const res = await speakLineForAgent(key, mode, question)
+      if (!res.ok) {
+        flash(res.error)
+        return
+      }
+      setTranscript({ key, name: res.displayName, line: res.line })
+      const profile = { gender: "male", pitch: 1, rate: 1, persona: "" }
+      // Try premium OmniVoice; fall back to browser voices.
+      let usedPremium = false
+      try {
+        const synth = await synthesizeSpeech(res.line, profile)
+        if (synth.ok) {
+          usedPremium = true
+          await new Promise<void>((resolve) => {
+            setSpeakingKey(key)
+            playBase64Audio(synth.audioBase64, synth.mime, { onEnd: () => resolve() })
+          })
+        }
+      } catch {
+        // fall through to browser TTS
+      }
+      if (!usedPremium) {
+        await new Promise<void>((resolve) => {
+          setSpeakingKey(key)
+          void speakAsAgent(key, tier, res.line, { onEnd: () => resolve() })
+        })
+      }
+      setSpeakingKey(null)
+    },
+    [flash],
+  )
 
   // Build canvas nodes/edges from the graph snapshot (preserving saved layout).
   useEffect(() => {
@@ -150,6 +193,33 @@ export function PlaygroundTab() {
     setEdges(flowEdges)
   }, [data, setNodes, setEdges])
 
+  // Reflect the speaking agent onto its node (patch only, no full rebuild).
+  useEffect(() => {
+    setNodes((ns) =>
+      ns.map((n) => (n.type === "agent" ? { ...n, data: { ...n.data, speaking: n.id === speakingKey } } : n)),
+    )
+  }, [speakingKey, setNodes])
+
+  const introduceTeam = useCallback(async () => {
+    if (!data) return
+    setIntroducing(true)
+    introStopRef.current = false
+    for (const a of data.agents) {
+      if (introStopRef.current) break
+      // eslint-disable-next-line no-await-in-loop
+      await speakAgent(a.key, a.tier, "introduce")
+    }
+    setIntroducing(false)
+    setTranscript(null)
+  }, [data, speakAgent])
+
+  const stopIntroduce = useCallback(() => {
+    introStopRef.current = true
+    cancelSpeech()
+    setSpeakingKey(null)
+    setIntroducing(false)
+  }, [])
+
   const persistPositions = useCallback(() => {
     const next: Record<string, { x: number; y: number }> = {}
     for (const n of nodes) {
@@ -207,6 +277,15 @@ export function PlaygroundTab() {
           <Legend />
         </div>
         <div className="flex items-center gap-2">
+          {introducing ? (
+            <Button variant="destructive" size="sm" onClick={stopIntroduce}>
+              <Radio className="mr-1.5 size-4 animate-pulse" aria-hidden="true" /> Stop
+            </Button>
+          ) : (
+            <Button variant="secondary" size="sm" onClick={introduceTeam} title="Each agent introduces itself in its own voice">
+              <Volume2 className="mr-1.5 size-4" aria-hidden="true" /> Introduce team
+            </Button>
+          )}
           <Button variant="secondary" size="sm" onClick={() => setShowAdd((v) => !v)}>
             <Plus className="mr-1.5 size-4" aria-hidden="true" /> Add agent
           </Button>
@@ -278,7 +357,22 @@ export function PlaygroundTab() {
             onClose={() => setSelectedKey(null)}
             onChanged={() => mutate()}
             flash={flash}
+            speaking={speakingKey === selectedAgent.key}
+            transcript={transcript?.key === selectedAgent.key ? transcript.line : ""}
+            onIntroduce={() => speakAgent(selectedAgent.key, selectedAgent.tier, "introduce")}
+            onAsk={(q) => speakAgent(selectedAgent.key, selectedAgent.tier, "ask", q)}
           />
+        )}
+
+        {/* Live speaking caption (roll-call / introductions) */}
+        {transcript && speakingKey && (
+          <div className="pointer-events-none absolute bottom-3 left-1/2 z-40 w-[min(90%,540px)] -translate-x-1/2 rounded-xl border border-primary/30 bg-card/95 px-4 py-2.5 shadow-lg backdrop-blur-md">
+            <div className="flex items-center gap-2">
+              <span className="voice-wave"><span /><span /><span /><span /></span>
+              <span className="text-micro text-primary">{transcript.name}</span>
+            </div>
+            <p className="mt-1 text-sm leading-snug">{transcript.line}</p>
+          </div>
         )}
       </div>
 
@@ -385,16 +479,25 @@ function InspectorDrawer({
   onClose,
   onChanged,
   flash,
+  speaking,
+  transcript,
+  onIntroduce,
+  onAsk,
 }: {
   agent: Graph["agents"][number]
   inspector: Inspector | null
   onClose: () => void
   onChanged: () => void
   flash: (m: string) => void
+  speaking: boolean
+  transcript: string
+  onIntroduce: () => void
+  onAsk: (q: string) => void
 }) {
   const [renaming, setRenaming] = useState(false)
   const [newName, setNewName] = useState(agent.displayName)
   const [busy, setBusy] = useState(false)
+  const [question, setQuestion] = useState("")
 
   useEffect(() => {
     setNewName(agent.displayName)
@@ -440,6 +543,46 @@ function InspectorDrawer({
       <div className="rounded-lg border border-border p-3">
         <p className="text-xs leading-relaxed text-muted-foreground">{agent.role}</p>
       </div>
+
+      {/* Talk to this agent — Jarvis answers in the agent's voice */}
+      <section className="flex flex-col gap-2 rounded-lg border border-primary/25 bg-primary/5 p-3">
+        <div className="flex items-center justify-between">
+          <span className="text-micro text-primary">Talk to {agent.displayName}</span>
+          {speaking && (
+            <span className="voice-wave"><span /><span /><span /><span /></span>
+          )}
+        </div>
+        {transcript && <p className="rounded-md bg-card/70 p-2 text-[11px] leading-relaxed">{transcript}</p>}
+        <div className="flex gap-2">
+          <Input
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && question.trim()) {
+                onAsk(question.trim())
+                setQuestion("")
+              }
+            }}
+            placeholder={`Ask ${agent.displayName} something…`}
+            className="h-8"
+          />
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={!question.trim()}
+            onClick={() => {
+              onAsk(question.trim())
+              setQuestion("")
+            }}
+            aria-label="Ask"
+          >
+            <MessageCircle className="size-4" aria-hidden="true" />
+          </Button>
+        </div>
+        <Button size="sm" variant="ghost" className="justify-start" onClick={onIntroduce}>
+          <Volume2 className="mr-1.5 size-4" aria-hidden="true" /> Introduce yourself
+        </Button>
+      </section>
 
       {/* Live status */}
       <section className="flex flex-col gap-1.5">
