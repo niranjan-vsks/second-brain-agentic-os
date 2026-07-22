@@ -12,6 +12,7 @@ export interface AgentNodeData extends Record<string, unknown> {
   isOrchestrator: boolean
   paused: boolean
   speaking?: boolean
+  autonomy?: "review" | "auto"
   selected?: boolean
 }
 
@@ -71,12 +72,16 @@ export const AgentNode = memo(function AgentNode({ data, selected }: NodeProps) 
           <TierIcon className="size-3" aria-hidden="true" />
           {tier.label}
         </span>
-        {d.paused && (
+        {d.paused ? (
           <span className="inline-flex items-center gap-1 text-micro text-muted-foreground">
             <Pause className="size-3" aria-hidden="true" />
             paused
           </span>
-        )}
+        ) : d.autonomy === "auto" ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-1.5 text-[9px] font-semibold tracking-wide text-primary">
+            AUTO
+          </span>
+        ) : null}
       </div>
     </div>
   )

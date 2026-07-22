@@ -40,6 +40,7 @@ import {
   deleteEdgeAction,
   resetGraphAction,
 } from "@/app/actions/playground"
+import { setAutonomyAction } from "@/app/actions/playground"
 import { speakLineForAgent, synthesizeSpeech } from "@/app/actions/agent-voice"
 import { speakAsAgent, cancelSpeech, playBase64Audio } from "@/lib/speak-client"
 import { X, Plus, RotateCcw, Loader2, Crown, Trash2, Pause, Play, CircleDot, ExternalLink, Volume2, Radio, MessageCircle } from "lucide-react"
@@ -161,6 +162,7 @@ export function PlaygroundTab() {
             status: a.status,
             isOrchestrator: a.isOrchestrator,
             paused: a.paused,
+            autonomy: a.autonomy,
           },
         })
       })
@@ -645,6 +647,29 @@ function InspectorDrawer({
             }}
             aria-label="Active toggle"
           />
+        </div>
+        <div className="flex items-center justify-between rounded-lg border border-border p-2.5">
+          <div className="flex flex-col">
+            <span className="text-xs font-medium">Autonomy</span>
+            <span className="text-[10px] text-muted-foreground">
+              {agent.autonomy === "auto" ? "Autopilot — acts on its own" : "Review — you approve its actions"}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className={`text-micro ${agent.autonomy === "auto" ? "text-primary" : "text-muted-foreground"}`}>
+              {agent.autonomy === "auto" ? "AUTO" : "REVIEW"}
+            </span>
+            <Switch
+              checked={agent.autonomy === "auto"}
+              onCheckedChange={async (v) => {
+                setBusy(true)
+                await setAutonomyAction(agent.key, v ? "auto" : "review")
+                setBusy(false)
+                onChanged()
+              }}
+              aria-label="Autonomy toggle"
+            />
+          </div>
         </div>
         <div className="flex gap-2">
           {renaming ? (

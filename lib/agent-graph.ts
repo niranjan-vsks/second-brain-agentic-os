@@ -26,6 +26,10 @@ import {
   type AgentGroup,
 } from "@/lib/agent-registry"
 
+/** Per-agent autonomy: "review" = human gate before consequential actions;
+ *  "auto" = the agent acts on its own (graduated autopilot). Default review. */
+export type AutonomyLevel = "review" | "auto"
+
 export interface AgentGraphOverlay {
   renames: Record<string, string>
   paused: string[]
@@ -35,6 +39,8 @@ export interface AgentGraphOverlay {
   removedEdges: string[]
   orchestrators: Partial<Record<AgentGroup, string>>
   layout: Record<string, { x: number; y: number }>
+  /** agentKey -> autonomy level. Absent = "review" (safe default). */
+  autonomy: Record<string, AutonomyLevel>
 }
 
 export const EMPTY_OVERLAY: AgentGraphOverlay = {
@@ -46,11 +52,13 @@ export const EMPTY_OVERLAY: AgentGraphOverlay = {
   removedEdges: [],
   orchestrators: {},
   layout: {},
+  autonomy: {},
 }
 
 export interface EffectiveAgent extends AgentDef {
   paused: boolean
   isAdded: boolean
+  autonomy: AutonomyLevel
 }
 
 export interface EffectiveGraph {
@@ -70,6 +78,7 @@ export function mergeGraph(overlay: AgentGraphOverlay): EffectiveGraph {
   const paused = new Set(overlay.paused ?? [])
   const renames = overlay.renames ?? {}
   const orchestratorOverride = overlay.orchestrators ?? {}
+  const autonomy = overlay.autonomy ?? {}
 
   const baseAgents: EffectiveAgent[] = BASE_AGENTS.filter((a) => !removed.has(a.key)).map((a) => ({
     ...a,
@@ -81,6 +90,7 @@ export function mergeGraph(overlay: AgentGraphOverlay): EffectiveGraph {
         : a.isOrchestrator,
     paused: paused.has(a.key),
     isAdded: false,
+    autonomy: autonomy[a.key] ?? "review",
   }))
 
   const addedAgents: EffectiveAgent[] = (overlay.added ?? []).map((a) => ({
@@ -88,6 +98,7 @@ export function mergeGraph(overlay: AgentGraphOverlay): EffectiveGraph {
     displayName: renames[a.key] ?? a.displayName,
     paused: paused.has(a.key),
     isAdded: true,
+    autonomy: autonomy[a.key] ?? "review",
   }))
 
   const agents = [...baseAgents, ...addedAgents]
@@ -115,4 +126,24 @@ export async function isAgentPaused(userId: string, agentKey: string): Promise<b
   } catch {
     return false // never block a real run on a graph-read failure
   }
+}
+
+/**
+ * Dispatch-time autonomy check. "review" (default) = the caller must gate the
+ * consequential action behind human approval; "auto" = the caller may proceed
+ * autonomously. Every consequential agent action (apply-submit, send-outreach,
+ * auto-tailor, etc.) consults this so the operator can graduate each agent to
+ * full autopilot independently, per the self-improving-agents model.
+ */
+export async function getAutonomy(userId: string, agentKey: string): Promise<AutonomyLevel> {
+  try {
+    const overlay = await getOverlay(userId)
+    return overlay.autonomy?.[agentKey] ?? "review"
+  } catch {
+    return "review" // fail safe: never act autonomously on a read failure
+  }
+}
+
+export async function isAutonomous(userId: string, agentKey: string): Promise<boolean> {
+  return (await getAutonomy(userId, agentKey)) === "auto"
 }

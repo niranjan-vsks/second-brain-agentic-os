@@ -19,7 +19,7 @@ import { encrypt, isCryptoConfigured } from "@/lib/crypto"
 import { describeLlm } from "@/lib/llm"
 import { TASK_TIERS } from "@/lib/model-router"
 import { AGENT_BY_KEY } from "@/lib/agent-registry"
-import { renameAgent, setAgentPaused, addEdge, deleteEdge } from "@/lib/agent-graph-mutations"
+import { renameAgent, setAgentPaused, addEdge, deleteEdge, setAgentAutonomy } from "@/lib/agent-graph-mutations"
 
 // =============================================================================
 // Jarvis orchestrator tools — the "god-mode" layer.
@@ -491,6 +491,7 @@ export function orchestratorTools(userId: string) {
             group: a.group,
             orchestrator: Boolean(a.isOrchestrator),
             paused: a.paused,
+            autonomy: a.autonomy,
             status: a.paused ? "idle (paused)" : agentStatus(a, sources, blocked).status,
           })),
           handoffs: graph.edges.map((e) => `${e.source} → ${e.target} (${e.kind})`),
@@ -544,6 +545,23 @@ export function orchestratorTools(userId: string) {
       execute: async ({ agentKey, name }) => {
         const r = await renameAgent(userId, agentKey, name)
         await logAction(userId, "rename_agent", `Renamed ${agentKey} → "${name}"`, { agentKey, name })
+        return r
+      },
+    }),
+
+    set_agent_autonomy: tool({
+      description:
+        "Set an agent's autonomy level in the shared graph: 'review' (human approves its consequential actions — the safe default) or 'auto' (the agent acts on its own — graduated autopilot). Use as the operator grows to trust an agent. Consequential agent actions consult this at dispatch time. Reflects in the Playground immediately.",
+      inputSchema: z.object({
+        agentKey: z.string(),
+        level: z.enum(["review", "auto"]),
+      }),
+      execute: async ({ agentKey, level }) => {
+        if (!AGENT_BY_KEY[agentKey] && !agentKey.startsWith("custom.") && !agentKey.startsWith("jobhunt.")) {
+          return { error: `Unknown agent key: ${agentKey}` }
+        }
+        const r = await setAgentAutonomy(userId, agentKey, level)
+        await logAction(userId, "set_agent_autonomy", `Set ${agentKey} autonomy → ${level}`, { agentKey, level })
         return r
       },
     }),

@@ -138,6 +138,14 @@ export async function setGroupOrchestrator(userId: string, group: AgentGroup, ke
   return { ok: true as const }
 }
 
+export async function setAgentAutonomy(userId: string, key: string, level: "review" | "auto") {
+  const overlay = await getOverlay(userId)
+  overlay.autonomy = { ...overlay.autonomy, [key]: level }
+  await writeOverlay(userId, overlay)
+  await audit(userId, `Set ${key} autonomy → ${level}`, { key, level })
+  return { ok: true as const }
+}
+
 export async function saveLayout(userId: string, layout: Record<string, { x: number; y: number }>) {
   const overlay = await getOverlay(userId)
   overlay.layout = layout

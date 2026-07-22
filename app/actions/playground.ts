@@ -20,6 +20,7 @@ import {
   addEdge as addEdgeMut,
   deleteEdge as deleteEdgeMut,
   setGroupOrchestrator,
+  setAgentAutonomy,
   saveLayout as saveLayoutMut,
   resetGraph as resetGraphMut,
 } from "@/lib/agent-graph-mutations"
@@ -50,6 +51,7 @@ export async function getPlaygroundGraph() {
       loadBearing: Boolean(a.loadBearing),
       paused: a.paused,
       isAdded: a.isAdded,
+      autonomy: a.autonomy,
       status: st.status,
       statusDetail: st.detail,
       lastAt: st.lastAt,
@@ -147,6 +149,12 @@ export async function deleteEdgeAction(edgeId: string) {
 
 export async function setOrchestratorAction(group: AgentGroup, key: string) {
   const r = await setGroupOrchestrator(await getUserId(), group, key)
+  revalidatePath("/")
+  return r
+}
+
+export async function setAutonomyAction(key: string, level: "review" | "auto") {
+  const r = await setAgentAutonomy(await getUserId(), key, level)
   revalidatePath("/")
   return r
 }
