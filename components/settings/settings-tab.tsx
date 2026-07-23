@@ -14,7 +14,7 @@ import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { getSettingsSnapshot, saveConfigAction, saveApiKeyAction, deleteApiKeyAction, saveBrainAction } from "@/app/actions/settings"
+import { getSettingsSnapshot, saveConfigAction, saveApiKeyAction, deleteApiKeyAction, saveBrainAction, applyRecommendedRoutingAction, saveRoutingAction } from "@/app/actions/settings"
 import {
   Settings2,
   Cpu,
@@ -27,6 +27,7 @@ import {
   Trash2,
   ExternalLink,
   Loader2,
+  Plus,
 } from "lucide-react"
 
 type Snapshot = Awaited<ReturnType<typeof getSettingsSnapshot>>
@@ -178,6 +179,182 @@ function GeneralSection({ data, onSaved }: { data: Snapshot; onSaved: () => void
 
 // --- Model Routing ----------------------------------------------------------------
 
+const ENGINE_PROVIDERS = [
+  { id: "gateway", label: "AI Gateway" },
+  { id: "moonshot", label: "Kimi" },
+  { id: "google", label: "Gemini" },
+  { id: "openrouter", label: "OpenRouter" },
+  { id: "custom", label: "Custom" },
+] as const
+
+type BrainCfg = Snapshot["brainConfig"]
+type Strategy = BrainCfg["strategies"][number]
+
+function RoutingStrategiesCard({ data }: { data: Snapshot }) {
+  const [strategies, setStrategies] = useState<Strategy[]>(data.brainConfig.strategies ?? [])
+  const [defaultStrategy, setDefaultStrategy] = useState(data.brainConfig.defaultStrategy ?? "")
+  const [groupStrategies, setGroupStrategies] = useState<Record<string, string>>(data.brainConfig.groupStrategies ?? {})
+  const [busy, setBusy] = useState("")
+  const [msg, setMsg] = useState("")
+
+  const newStrategy = (): Strategy => ({
+    id: Math.random().toString(36).slice(2, 10),
+    name: "New strategy",
+    tiers: {
+      light: { provider: "gateway", model: "" },
+      standard: { provider: "gateway", model: "" },
+      heavy: { provider: "gateway", model: "" },
+    },
+  })
+  const patch = (id: string, fn: (s: Strategy) => Strategy) => setStrategies((prev) => prev.map((s) => (s.id === id ? fn(s) : s)))
+
+  async function save() {
+    setBusy("save")
+    await saveRoutingAction({ strategies, defaultStrategy, groupStrategies })
+    setBusy("")
+    setMsg("Routing saved.")
+    setTimeout(() => setMsg(""), 2500)
+  }
+  async function applyPlan() {
+    setBusy("plan")
+    const r = await applyRecommendedRoutingAction()
+    setBusy("")
+    setMsg(`Seeded ${r.count} strategies · default = ${r.defaultId}. Reload to edit.`)
+  }
+
+  return (
+    <Card className="surface-raised border-0">
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <CardTitle>Routing Strategies</CardTitle>
+            <CardDescription>
+              Define reusable strategies (basic / standard / complex → engines), pick a global default, and assign a
+              different strategy per functional area.
+            </CardDescription>
+          </div>
+          <Button variant="secondary" size="sm" onClick={applyPlan} disabled={busy !== ""}>
+            {busy === "plan" ? <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden="true" /> : null}
+            Seed Gemini&apos;s plan
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        {/* Strategy editors */}
+        <div className="flex flex-col gap-3">
+          {strategies.length === 0 && (
+            <p className="text-xs text-muted-foreground">No strategies yet — add one, or seed Gemini&apos;s plan.</p>
+          )}
+          {strategies.map((s) => (
+            <div key={s.id} className="flex flex-col gap-2 rounded-lg border border-border p-3">
+              <div className="flex items-center gap-2">
+                <Input
+                  value={s.name}
+                  onChange={(e) => patch(s.id, (x) => ({ ...x, name: e.target.value }))}
+                  className="h-8 max-w-[220px] font-medium"
+                  aria-label="Strategy name"
+                />
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Delete strategy"
+                  onClick={() => {
+                    setStrategies((prev) => prev.filter((x) => x.id !== s.id))
+                    if (defaultStrategy === s.id) setDefaultStrategy("")
+                  }}
+                >
+                  <Trash2 className="size-4" aria-hidden="true" />
+                </Button>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {(["light", "standard", "heavy"] as const).map((tier) => (
+                  <div key={tier} className="flex flex-col gap-1 rounded-md border border-border/70 p-2">
+                    <span className="text-micro text-muted-foreground">
+                      {tier === "light" ? "basic" : tier === "heavy" ? "complex" : "standard"}
+                    </span>
+                    <Select
+                      value={s.tiers[tier].provider}
+                      onValueChange={(v) => patch(s.id, (x) => ({ ...x, tiers: { ...x.tiers, [tier]: { ...x.tiers[tier], provider: (v as Strategy["tiers"]["light"]["provider"]) ?? "gateway" } } }))}
+                    >
+                      <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {ENGINE_PROVIDERS.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>{p.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      value={s.tiers[tier].model}
+                      onChange={(e) => patch(s.id, (x) => ({ ...x, tiers: { ...x.tiers, [tier]: { ...x.tiers[tier], model: e.target.value } } }))}
+                      placeholder="model id (blank = default)"
+                      className="h-7 text-[11px]"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          <Button variant="ghost" size="sm" className="self-start" onClick={() => setStrategies((prev) => [...prev, newStrategy()])}>
+            <Plus className="mr-1.5 size-4" aria-hidden="true" /> Add strategy
+          </Button>
+        </div>
+
+        {/* Global default */}
+        <div className="flex flex-col gap-1.5 rounded-lg border border-primary/25 bg-primary/5 p-3">
+          <Label className="text-xs">Global default strategy</Label>
+          <Select value={defaultStrategy || "__none"} onValueChange={(v) => setDefaultStrategy(v === "__none" ? "" : (v ?? ""))}>
+            <SelectTrigger><SelectValue placeholder="Use the global brain" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none">Use the global brain (above)</SelectItem>
+              {strategies.map((s) => (
+                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-[10px] text-muted-foreground">Applied to every agent unless a functional area overrides it below.</p>
+        </div>
+
+        {/* Per-area assignment */}
+        <div className="flex flex-col gap-2">
+          <Label className="text-xs">Per-area overrides</Label>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {data.routingGroups.map((g) => (
+              <div key={g.id} className="flex items-center justify-between gap-2 rounded-lg border border-border px-2.5 py-1.5">
+                <span className="text-xs">{g.label}</span>
+                <Select
+                  value={groupStrategies[g.id] || "__default"}
+                  onValueChange={(v) => setGroupStrategies((prev) => {
+                    const next = { ...prev }
+                    if (v === "__default") delete next[g.id]
+                    else next[g.id] = v ?? ""
+                    return next
+                  })}
+                >
+                  <SelectTrigger className="h-7 w-[150px] text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__default">Use default</SelectItem>
+                    {strategies.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2">
+          {msg && <span className="text-[11px] text-muted-foreground">{msg}</span>}
+          <Button onClick={save} disabled={busy !== ""}>
+            {busy === "save" ? <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden="true" /> : null}
+            Save routing
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 function ModelBrainCard({ data }: { data: Snapshot }) {
   const [cfg, setCfg] = useState(data.brainConfig)
   const [busy, setBusy] = useState(false)
@@ -185,12 +362,14 @@ function ModelBrainCard({ data }: { data: Snapshot }) {
   const providers = [
     { id: "gateway", label: "Vercel AI Gateway (default)" },
     { id: "moonshot", label: "Kimi (Moonshot)" },
-    { id: "openrouter", label: "OpenRouter (GLM, Kimi, …)" },
+    { id: "google", label: "Gemini (Google AI Studio direct)" },
+    { id: "openrouter", label: "OpenRouter (GLM, DeepSeek, …)" },
     { id: "custom", label: "Custom OpenAI-compatible" },
   ] as const
   const keyHint: Record<string, string> = {
     gateway: "Uses AI_GATEWAY_API_KEY (server env).",
-    moonshot: "Add a Kimi (Moonshot) key under API Keys.",
+    moonshot: "Add a Kimi (Moonshot) key under API Keys. Kimi K3 for deep reasoning.",
+    google: "Add a Google AI Studio key under API Keys. Gemini 2.5 Flash — fast + cheap.",
     openrouter: "Add an OpenRouter key under API Keys.",
     custom: "Set the base URL below + an OpenRouter/LLM key under API Keys.",
   }
@@ -249,6 +428,10 @@ function ModelBrainCard({ data }: { data: Snapshot }) {
           ))}
         </div>
         <p className="text-[11px] text-muted-foreground">Leave a model blank to use the provider default. Same model on all three tiers is fine.</p>
+        <p className="text-[11px] text-muted-foreground">
+          This is the global fallback engine. For different models per complexity tier and per functional area, use{" "}
+          <span className="text-foreground">Routing Strategies</span> below.
+        </p>
         <div className="flex justify-end">
           <Button onClick={save} disabled={busy}>
             {busy ? <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden="true" /> : null}
@@ -270,6 +453,7 @@ function RoutingSection({ data }: { data: Snapshot }) {
   return (
     <div className="flex flex-col gap-4">
       <ModelBrainCard data={data} />
+      <RoutingStrategiesCard data={data} />
       <Card className="surface-raised border-0">
         <CardHeader>
           <div className="flex items-center justify-between">

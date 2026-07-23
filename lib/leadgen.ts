@@ -180,7 +180,7 @@ async function qualifyBatch(
 
   // standard tier with one manual escalation to heavy on parse failure
   const { text } = await generateText({
-    model: await getModelForUser(userId, "standard"), // leadgen.qualify — structured scoring against ICP
+    model: await getModelForUser(userId, "standard", "leadgen.qualify"), // leadgen.qualify — structured scoring against ICP
     system,
     prompt,
   })
@@ -188,7 +188,7 @@ async function qualifyBatch(
   if (first) return first
 
   const { text: retry } = await generateText({
-    model: await getModelForUser(userId, "heavy"), // leadgen.qualify escalation — retry on invalid JSON
+    model: await getModelForUser(userId, "heavy", "leadgen.qualify"), // leadgen.qualify escalation — retry on invalid JSON
     system,
     prompt,
   })

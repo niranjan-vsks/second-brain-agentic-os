@@ -40,7 +40,7 @@ export async function composeScript(projectId: string) {
 
   try {
     const { text } = await generateText({
-      model: await getModelForUser(userId, "heavy"), // youtube.script_compose — long-form creative structure
+      model: await getModelForUser(userId, "heavy", "youtube.script_compose"), // youtube.script_compose — long-form creative structure
       system: `You are a YouTube script composer for: ${settings?.contentDomain || "general content"}.
 Tone/voice notes: ${settings?.toneVoiceNotes || "engaging, punchy, hook-first"}.
 Video format: ${project.videoFormat} (${project.videoFormat === "shorts" ? "15-60 seconds, vertical" : "3-15 minutes"}).
@@ -106,7 +106,7 @@ export async function buildPromptAndGenerate(projectId: string) {
   if (!script) throw new Error("No script revision found")
 
   const { text: videoPrompt } = await generateText({
-    model: await getModelForUser(userId, "standard"), // youtube.prompt_builder — condensing, not deep reasoning
+    model: await getModelForUser(userId, "standard", "youtube.prompt_builder"), // youtube.prompt_builder — condensing, not deep reasoning
     system: `You are a video-generation prompt engineer. Convert the shot breakdown into ONE cohesive text-to-video prompt (max 900 chars) describing visuals, motion, pacing, and style for a ${project.videoFormat === "shorts" ? "vertical 9:16 short" : "16:9 long-form"} video. Output prompt text only.`,
     prompt: `Premise: ${project.premise}\nShot breakdown: ${script.shotBreakdown}`,
   })

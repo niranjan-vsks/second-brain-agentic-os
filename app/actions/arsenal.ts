@@ -266,7 +266,7 @@ export async function ingestSkillRepo(repoUrl: string) {
 
 async function inferSkillMeta(userId: string, parsed: ParsedSkill): Promise<{ description: string; tags: string; targetAgents: string }> {
   const { text } = await generateText({
-    model: await getModelForUser(userId, "standard"), // arsenal.skill_extract — metadata inference for frontmatter-less skill files
+    model: await getModelForUser(userId, "standard", "arsenal.skill_extract"), // arsenal.skill_extract — metadata inference for frontmatter-less skill files
     system: `You classify a "skill" document for an operator OS with exactly these agents:
 ${Object.entries(AGENT_KEYS)
   .map(([k, v]) => `- ${k}: ${v}`)
@@ -371,7 +371,7 @@ export async function analyzeAutomation(id: string) {
 
   try {
     const { text } = await generateText({
-      model: await getModelForUser(userId, "heavy"), // arsenal.analyze_automation — workflow JSON → capability analysis + absorbable parts
+      model: await getModelForUser(userId, "heavy", "arsenal.analyze_automation"), // arsenal.analyze_automation — workflow JSON → capability analysis + absorbable parts
       system: `You analyze n8n workflow JSON for a personal operator OS whose existing agents are:
 ${Object.entries(AGENT_KEYS)
   .map(([k, v]) => `- ${k}: ${v}`)

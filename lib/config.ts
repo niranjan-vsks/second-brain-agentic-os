@@ -116,7 +116,13 @@ export const KEY_PROVIDERS: Record<
     label: "Kimi (Moonshot)",
     envVar: "MOONSHOT_API_KEY",
     docsUrl: "https://platform.moonshot.ai/console/api-keys",
-    purpose: "LLM brain — Kimi K2 via Moonshot's OpenAI-compatible API. Pick it as your default model in Settings → Model Brain",
+    purpose: "LLM brain — Kimi K3 via Moonshot's OpenAI-compatible API. Pick it in Settings → Model Brain (deep reasoning / resume tailoring)",
+  },
+  google_ai: {
+    label: "Google AI Studio (Gemini)",
+    envVar: "GOOGLE_AI_API_KEY",
+    docsUrl: "https://aistudio.google.com/apikey",
+    purpose: "LLM brain — Gemini direct (2.5 Flash) via Google's OpenAI-compatible endpoint. Fast, cheap, 1M context — great for parsing/enrichment",
   },
 }
 
@@ -213,20 +219,106 @@ export const LEADGEN_DEFAULTS: LeadgenConfig = {
 // --- LLM brain selection (Settings → Model Brain) -----------------------------
 // Which provider + models power every agent. Stored per-user in app_config
 // ("llm_brain"). Resolved (with vault keys) by lib/llm.ts getModelForUser().
-export type LlmProvider = "gateway" | "openrouter" | "moonshot" | "custom"
+export type LlmProvider = "gateway" | "openrouter" | "moonshot" | "google" | "custom"
+
+/** Per-task model override: route a specific agent task to a specific engine. */
+export interface TaskModelOverride {
+  provider: LlmProvider
+  model: string
+  /** optional cheaper fallback (provider:model) used if the primary errors/rate-limits */
+  fallbackProvider?: LlmProvider
+  fallbackModel?: string
+}
+
+/** One engine assignment (provider + model id). Empty => provider default. */
+export interface EngineChoice {
+  provider: LlmProvider
+  model: string
+}
+
+/**
+ * A named routing STRATEGY: maps the three complexity tiers (basic/light,
+ * standard, complex/heavy) to specific engines. Reusable across agents.
+ */
+export interface RoutingStrategy {
+  id: string
+  name: string
+  tiers: { light: EngineChoice; standard: EngineChoice; heavy: EngineChoice }
+}
+
+/** Functional areas a strategy can be assigned to (mirrors AgentGroup). */
+export const ROUTING_GROUPS: { id: string; label: string }[] = [
+  { id: "core", label: "Jarvis / Core" },
+  { id: "career", label: "Career Ops" },
+  { id: "jobhunt", label: "Job-Hunt Engine" },
+  { id: "linkedin", label: "LinkedIn OS" },
+  { id: "freelance", label: "Freelance Funnel" },
+  { id: "leadgen", label: "Lead-Gen" },
+  { id: "youtube", label: "YouTube" },
+  { id: "arsenal", label: "Arsenal" },
+]
 
 export interface LlmBrainConfig {
   provider: LlmProvider
   /** custom only: OpenAI-compatible base URL */
   baseUrl: string
-  /** optional per-tier model id overrides; empty => provider default */
+  /** legacy/global per-tier model ids (fallback engine when no strategy applies) */
   models: { light: string; standard: string; heavy: string }
+  /** named reusable routing strategies */
+  strategies: RoutingStrategy[]
+  /** global default strategy id (applied to every agent unless a group overrides) */
+  defaultStrategy: string
+  /** per-functional-area strategy assignment (group id -> strategy id) */
+  groupStrategies: Record<string, string>
+  /** finest-grained optional per-TASK override (advanced; wins over strategies) */
+  taskModels: Record<string, TaskModelOverride>
 }
 
 export const LLM_BRAIN_DEFAULTS: LlmBrainConfig = {
   provider: "gateway",
   baseUrl: "",
   models: { light: "", standard: "", heavy: "" },
+  strategies: [],
+  defaultStrategy: "",
+  groupStrategies: {},
+  taskModels: {},
+}
+
+/**
+ * Seed strategies from Gemini's benchmark plan. Creates 3 reusable strategies
+ * and returns them + the recommended default id. Used by the one-click preset.
+ */
+export function recommendedStrategies(): { strategies: RoutingStrategy[]; defaultId: string } {
+  const strategies: RoutingStrategy[] = [
+    {
+      id: "max-quality",
+      name: "Max Quality",
+      tiers: {
+        light: { provider: "google", model: "gemini-2.5-flash" },
+        standard: { provider: "moonshot", model: "" },
+        heavy: { provider: "moonshot", model: "" }, // Kimi K3 for deep reasoning
+      },
+    },
+    {
+      id: "balanced-gemini",
+      name: "Balanced (Gemini plan)",
+      tiers: {
+        light: { provider: "google", model: "gemini-2.5-flash-lite" },
+        standard: { provider: "google", model: "gemini-2.5-flash" },
+        heavy: { provider: "moonshot", model: "" }, // Kimi K3 where reasoning matters
+      },
+    },
+    {
+      id: "cost-saver",
+      name: "Cost Saver",
+      tiers: {
+        light: { provider: "google", model: "gemini-2.5-flash-lite" },
+        standard: { provider: "openrouter", model: "deepseek/deepseek-chat" },
+        heavy: { provider: "google", model: "gemini-2.5-flash" },
+      },
+    },
+  ]
+  return { strategies, defaultId: "balanced-gemini" }
 }
 
 // --- Job-Hunt engine config (Node 1 Sourcer curation criteria) ----------------

@@ -76,7 +76,7 @@ export async function jarvisChat(
       execute: async ({ question }) => {
         // Reuse the hardened text-to-SQL path: generate, validate, execute.
         const { text: rawSql } = await generateText({
-          model: await getModelForUser(userId, "standard"), // jarvis.query_os_data — SQL generation
+          model: await getModelForUser(userId, "standard", "os_chat.text_to_sql"), // jarvis.query_os_data — SQL generation
           system: `Convert the question to a single PostgreSQL SELECT statement. Output ONLY SQL, no markdown. Always filter user-owned tables by "userId" = $1. Schema:\n${SCHEMA_DESCRIPTION}`,
           prompt: question,
         })
@@ -204,7 +204,7 @@ export async function jarvisChat(
 
   try {
     const { text } = await generateText({
-      model: await getModelForUser(userId, "heavy"), // jarvis.chat — orchestrator loop: multi-tool planning over the whole OS
+      model: await getModelForUser(userId, "heavy", "os_chat.jarvis"), // jarvis.chat — orchestrator loop: multi-tool planning over the whole OS
       system: JARVIS_SYSTEM.replace(
         "{{TODAY}}",
         new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "full" }),

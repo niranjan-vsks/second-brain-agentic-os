@@ -21,6 +21,7 @@ import {
   GENERAL_DEFAULTS,
   CONNECTIONS_DEFAULTS,
   LLM_BRAIN_DEFAULTS,
+  ROUTING_GROUPS,
   type LlmBrainConfig,
 } from "@/lib/config"
 import { describeLlm, describeLlmForUser } from "@/lib/llm"
@@ -89,6 +90,7 @@ export async function getSettingsSnapshot() {
     connectionsForm,
     brainConfig,
     brain: brainDesc,
+    routingGroups: ROUTING_GROUPS,
     // Masked key metadata only — never the key material
     keys: keyRows.map((k) => ({
       provider: k.provider,
@@ -178,8 +180,11 @@ export async function saveApiKeyAction(provider: string, key: string, label: str
 /** Set the LLM brain (provider + optional per-tier models) — Settings → Model Brain. */
 export async function saveBrainAction(cfg: LlmBrainConfig) {
   const userId = await getUserId()
+  const current = await getConfig(userId, "llm_brain", LLM_BRAIN_DEFAULTS)
+  // Only touch the global-brain fields; PRESERVE strategies/default/group + tasks.
   const clean: LlmBrainConfig = {
-    provider: (["gateway", "openrouter", "moonshot", "custom"] as const).includes(cfg.provider) ? cfg.provider : "gateway",
+    ...current,
+    provider: (["gateway", "openrouter", "moonshot", "google", "custom"] as const).includes(cfg.provider) ? cfg.provider : "gateway",
     baseUrl: (cfg.baseUrl ?? "").trim().slice(0, 200),
     models: {
       light: (cfg.models?.light ?? "").trim().slice(0, 100),
@@ -187,18 +192,68 @@ export async function saveBrainAction(cfg: LlmBrainConfig) {
       heavy: (cfg.models?.heavy ?? "").trim().slice(0, 100),
     },
   }
+  await writeBrain(userId, clean)
+  revalidatePath("/")
+  return { ok: true }
+}
+
+async function writeBrain(userId: string, cfg: LlmBrainConfig) {
   const existing = await db
     .select({ id: appConfig.id })
     .from(appConfig)
     .where(and(eq(appConfig.userId, userId), eq(appConfig.key, "llm_brain")))
     .limit(1)
   if (existing.length > 0) {
-    await db.update(appConfig).set({ value: clean as unknown as Record<string, unknown>, updatedAt: new Date() }).where(and(eq(appConfig.userId, userId), eq(appConfig.key, "llm_brain")))
+    await db.update(appConfig).set({ value: cfg as unknown as Record<string, unknown>, updatedAt: new Date() }).where(and(eq(appConfig.userId, userId), eq(appConfig.key, "llm_brain")))
   } else {
-    await db.insert(appConfig).values({ id: randomUUID(), userId, key: "llm_brain", value: clean as unknown as Record<string, unknown> })
+    await db.insert(appConfig).values({ id: randomUUID(), userId, key: "llm_brain", value: cfg as unknown as Record<string, unknown> })
   }
+}
+
+/** Save the routing config: strategies + global default + per-area assignment. */
+export async function saveRoutingAction(input: {
+  strategies: LlmBrainConfig["strategies"]
+  defaultStrategy: string
+  groupStrategies: Record<string, string>
+}) {
+  const userId = await getUserId()
+  const current = await getConfig(userId, "llm_brain", LLM_BRAIN_DEFAULTS)
+  const strategies = (input.strategies ?? []).slice(0, 12).map((s) => ({
+    id: (s.id || randomUUID().slice(0, 8)).slice(0, 40),
+    name: (s.name || "Strategy").slice(0, 40),
+    tiers: {
+      light: { provider: s.tiers?.light?.provider ?? "gateway", model: (s.tiers?.light?.model ?? "").slice(0, 100) },
+      standard: { provider: s.tiers?.standard?.provider ?? "gateway", model: (s.tiers?.standard?.model ?? "").slice(0, 100) },
+      heavy: { provider: s.tiers?.heavy?.provider ?? "gateway", model: (s.tiers?.heavy?.model ?? "").slice(0, 100) },
+    },
+  }))
+  const ids = new Set(strategies.map((s) => s.id))
+  const groupStrategies: Record<string, string> = {}
+  for (const [g, sid] of Object.entries(input.groupStrategies ?? {})) if (sid && ids.has(sid)) groupStrategies[g] = sid
+  const merged: LlmBrainConfig = {
+    ...current,
+    strategies,
+    defaultStrategy: ids.has(input.defaultStrategy) ? input.defaultStrategy : "",
+    groupStrategies,
+  }
+  await writeBrain(userId, merged)
   revalidatePath("/")
   return { ok: true }
+}
+
+/** One-click: seed Gemini's benchmark strategies + set the balanced default. */
+export async function applyRecommendedRoutingAction() {
+  const userId = await getUserId()
+  const { recommendedStrategies } = await import("@/lib/config")
+  const current = await getConfig(userId, "llm_brain", LLM_BRAIN_DEFAULTS)
+  const { strategies, defaultId } = recommendedStrategies()
+  // Merge (replace same-id, keep the user's custom ones)
+  const byId = new Map((current.strategies ?? []).map((s) => [s.id, s]))
+  for (const s of strategies) byId.set(s.id, s)
+  const merged: LlmBrainConfig = { ...current, strategies: [...byId.values()], defaultStrategy: defaultId }
+  await writeBrain(userId, merged)
+  revalidatePath("/")
+  return { ok: true, count: strategies.length, defaultId }
 }
 
 export async function deleteApiKeyAction(provider: string) {

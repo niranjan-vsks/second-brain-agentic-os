@@ -106,43 +106,106 @@ const OPENROUTER_DEFAULTS: Record<ModelTier, string> = {
   heavy: "anthropic/claude-sonnet-4.5",
 }
 
+const GOOGLE_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
+const GOOGLE_DEFAULTS: Record<ModelTier, string> = {
+  light: "gemini-2.5-flash-lite",
+  standard: "gemini-2.5-flash",
+  heavy: "gemini-2.5-pro",
+}
+
 type BrainModel = Parameters<typeof import("ai").generateText>[0]["model"]
+type Provider = "gateway" | "openrouter" | "moonshot" | "google" | "custom"
 
-/**
- * Resolve the model for a user + tier, honoring their Settings → Model Brain
- * choice and vault key. Falls back to the env-based getModel() when the user
- * hasn't configured a brain (provider "gateway" with no overrides).
- */
-export async function getModelForUser(userId: string, tier: ModelTier = "heavy"): Promise<BrainModel> {
-  const { getConfig, getSecret, LLM_BRAIN_DEFAULTS } = await import("@/lib/config")
-  const brain = await getConfig(userId, "llm_brain", LLM_BRAIN_DEFAULTS)
-  const override = brain.models?.[tier]?.trim()
+/** Resolve ONE provider+model into a usable model object (or a gateway string). */
+async function buildModel(
+  userId: string,
+  provider: Provider,
+  model: string,
+  tier: ModelTier,
+  baseUrl?: string,
+): Promise<BrainModel> {
+  const { getSecret } = await import("@/lib/config")
 
-  if (brain.provider === "moonshot") {
+  if (provider === "moonshot") {
     const apiKey = (await getSecret(userId, "moonshot", "llm.brain")) || process.env.MOONSHOT_API_KEY
     if (!apiKey) throw new Error("Kimi (Moonshot) selected but no key — add a Moonshot key in Settings → API Keys.")
-    const compat = createOpenAICompatible({ name: "moonshot", apiKey, baseURL: MOONSHOT_BASE })
-    return compat(override || MOONSHOT_DEFAULTS[tier])
+    return createOpenAICompatible({ name: "moonshot", apiKey, baseURL: MOONSHOT_BASE })(model || MOONSHOT_DEFAULTS[tier])
   }
-
-  if (brain.provider === "openrouter") {
+  if (provider === "google") {
+    const apiKey = (await getSecret(userId, "google_ai", "llm.brain")) || process.env.GOOGLE_AI_API_KEY
+    if (!apiKey) throw new Error("Gemini (Google AI Studio) selected but no key — add a Google AI Studio key in Settings → API Keys.")
+    return createOpenAICompatible({ name: "google", apiKey, baseURL: GOOGLE_BASE })(model || GOOGLE_DEFAULTS[tier])
+  }
+  if (provider === "openrouter") {
     const apiKey = (await getSecret(userId, "openrouter", "llm.brain")) || process.env.OPENROUTER_API_KEY
     if (!apiKey) throw new Error("OpenRouter selected but no key — add an OpenRouter key in Settings → API Keys.")
-    const compat = createOpenAICompatible({ name: "openrouter", apiKey, baseURL: "https://openrouter.ai/api/v1" })
-    return compat(override || OPENROUTER_DEFAULTS[tier])
+    return createOpenAICompatible({ name: "openrouter", apiKey, baseURL: "https://openrouter.ai/api/v1" })(model || OPENROUTER_DEFAULTS[tier])
   }
-
-  if (brain.provider === "custom") {
+  if (provider === "custom") {
     const apiKey = (await getSecret(userId, "openrouter", "llm.brain")) || process.env.LLM_API_KEY || process.env.OPENROUTER_API_KEY
-    const baseURL = brain.baseUrl || process.env.LLM_BASE_URL
-    if (!apiKey || !baseURL) throw new Error("Custom brain needs a base URL (Settings → Model Brain) + a key (API Keys).")
-    const compat = createOpenAICompatible({ name: "custom", apiKey, baseURL })
-    return compat(override || process.env.LLM_MODEL || "gpt-4o-mini")
+    const url = baseUrl || process.env.LLM_BASE_URL
+    if (!apiKey || !url) throw new Error("Custom brain needs a base URL (Settings → Model Brain) + a key (API Keys).")
+    return createOpenAICompatible({ name: "custom", apiKey, baseURL: url })(model || process.env.LLM_MODEL || "gpt-4o-mini")
+  }
+  // gateway
+  if (model) return model
+  return getModel(tier)
+}
+
+/**
+ * Resolve the model for a user + tier, honoring Settings → Model Brain (global
+ * provider) AND an optional per-TASK override (Gemini's routing plan). Vault-key
+ * aware. Falls back to env getModel() when unconfigured.
+ *
+ * @param task optional TASK_TIERS task name — if the user routed that task to a
+ *             specific engine, it wins over the global brain.
+ */
+export async function getModelForUser(userId: string, tier: ModelTier = "heavy", task?: string): Promise<BrainModel> {
+  const { getConfig, LLM_BRAIN_DEFAULTS } = await import("@/lib/config")
+  const brain = await getConfig(userId, "llm_brain", LLM_BRAIN_DEFAULTS)
+
+  // Cascade (finest → coarsest):
+  //   1. per-task override (advanced)
+  //   2. per-group strategy (e.g. LinkedIn uses a different strategy than Career)
+  //   3. global default strategy
+  //   4. legacy global brain provider/models
+  //   5. env getModel()
+
+  // 1. per-task override (with graceful primary→fallback)
+  const override = task ? brain.taskModels?.[task] : undefined
+  if (override?.provider) {
+    try {
+      return await buildModel(userId, override.provider as Provider, override.model?.trim() ?? "", tier, brain.baseUrl)
+    } catch (e) {
+      if (override.fallbackProvider) {
+        return buildModel(userId, override.fallbackProvider as Provider, override.fallbackModel?.trim() ?? "", tier, brain.baseUrl)
+      }
+      throw e
+    }
   }
 
-  // gateway (default): honor a per-tier override, else fall back to env getModel()
-  if (override) return override
-  return getModel(tier)
+  // 2/3. strategy — group override else global default
+  const strategies = brain.strategies ?? []
+  if (strategies.length > 0 && (brain.defaultStrategy || Object.keys(brain.groupStrategies ?? {}).length > 0)) {
+    let group: string | undefined
+    if (task) {
+      try {
+        const { AGENT_BY_KEY } = await import("@/lib/agent-registry")
+        group = AGENT_BY_KEY[task]?.group
+      } catch {
+        group = undefined
+      }
+    }
+    const stratId = (group && brain.groupStrategies?.[group]) || brain.defaultStrategy
+    const strat = strategies.find((s) => s.id === stratId)
+    const choice = strat?.tiers?.[tier]
+    if (choice?.provider) {
+      return buildModel(userId, choice.provider as Provider, choice.model?.trim() ?? "", tier, brain.baseUrl)
+    }
+  }
+
+  // 4/5. legacy global brain (falls back to env getModel inside buildModel gateway path)
+  return buildModel(userId, brain.provider as Provider, brain.models?.[tier]?.trim() ?? "", tier, brain.baseUrl)
 }
 
 /** Human-readable description of the active brain per tier, for settings UI / diagnostics. */
@@ -178,6 +241,15 @@ export async function describeLlmForUser(
       models: { light: eff("light", MOONSHOT_DEFAULTS.light), standard: eff("standard", MOONSHOT_DEFAULTS.standard), heavy: eff("heavy", MOONSHOT_DEFAULTS.heavy) },
       configured: Boolean(key),
       keySource: key ? "ready" : "missing Moonshot key",
+    }
+  }
+  if (brain.provider === "google") {
+    const key = (await getSecret(userId, "google_ai", "").catch(() => null)) || process.env.GOOGLE_AI_API_KEY
+    return {
+      provider: "Gemini (Google AI Studio)",
+      models: { light: eff("light", GOOGLE_DEFAULTS.light), standard: eff("standard", GOOGLE_DEFAULTS.standard), heavy: eff("heavy", GOOGLE_DEFAULTS.heavy) },
+      configured: Boolean(key),
+      keySource: key ? "ready" : "missing Google AI Studio key",
     }
   }
   if (brain.provider === "openrouter") {

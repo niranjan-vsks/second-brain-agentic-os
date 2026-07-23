@@ -52,7 +52,7 @@ export async function generateAdCreative(input: {
 
   try {
     const { text } = await generateText({
-      model: await getModelForUser(userId, "standard"), // ads.creative — structured drafting
+      model: await getModelForUser(userId, "standard", "ads.creative"), // ads.creative — structured drafting
       system: `You are an ad creative script composer. Write ${typeGuidance}. Output STRICT JSON: {"premise": "...", "script": "...", "videoPrompt": "single text-to-video generation prompt, max 900 chars"}. JSON only, no fences.${directiveBlock(override)}${skillsCtx}`,
       prompt: `Client brief: ${input.brief}`,
     })
