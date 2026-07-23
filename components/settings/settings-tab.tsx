@@ -14,7 +14,7 @@ import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { getSettingsSnapshot, saveConfigAction, saveApiKeyAction, deleteApiKeyAction } from "@/app/actions/settings"
+import { getSettingsSnapshot, saveConfigAction, saveApiKeyAction, deleteApiKeyAction, saveBrainAction } from "@/app/actions/settings"
 import {
   Settings2,
   Cpu,
@@ -178,6 +178,88 @@ function GeneralSection({ data, onSaved }: { data: Snapshot; onSaved: () => void
 
 // --- Model Routing ----------------------------------------------------------------
 
+function ModelBrainCard({ data }: { data: Snapshot }) {
+  const [cfg, setCfg] = useState(data.brainConfig)
+  const [busy, setBusy] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const providers = [
+    { id: "gateway", label: "Vercel AI Gateway (default)" },
+    { id: "moonshot", label: "Kimi (Moonshot)" },
+    { id: "openrouter", label: "OpenRouter (GLM, Kimi, …)" },
+    { id: "custom", label: "Custom OpenAI-compatible" },
+  ] as const
+  const keyHint: Record<string, string> = {
+    gateway: "Uses AI_GATEWAY_API_KEY (server env).",
+    moonshot: "Add a Kimi (Moonshot) key under API Keys.",
+    openrouter: "Add an OpenRouter key under API Keys.",
+    custom: "Set the base URL below + an OpenRouter/LLM key under API Keys.",
+  }
+
+  async function save() {
+    setBusy(true)
+    await saveBrainAction(cfg)
+    setBusy(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  return (
+    <Card className="surface-raised border-0 ring-1 ring-primary/20">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>Model Brain</CardTitle>
+            <CardDescription>
+              Which provider + models power every agent. Now:{" "}
+              <span className="font-mono text-foreground">{data.brain.provider}</span> — {data.brain.keySource}
+            </CardDescription>
+          </div>
+          <StatusDot ok={data.brain.configured} okLabel="Ready" badLabel="Not ready" />
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs">Provider</Label>
+          <Select value={cfg.provider} onValueChange={(v) => setCfg({ ...cfg, provider: (v as typeof cfg.provider) ?? "gateway" })}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {providers.map((p) => (
+                <SelectItem key={p.id} value={p.id}>{p.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-[11px] text-muted-foreground">{keyHint[cfg.provider]}</p>
+        </div>
+        {cfg.provider === "custom" && (
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs">Base URL</Label>
+            <Input placeholder="https://api.example.com/v1" value={cfg.baseUrl} onChange={(e) => setCfg({ ...cfg, baseUrl: e.target.value })} />
+          </div>
+        )}
+        <div className="grid gap-2 sm:grid-cols-3">
+          {(["light", "standard", "heavy"] as const).map((tier) => (
+            <div key={tier} className="flex flex-col gap-1.5">
+              <Label className="text-xs capitalize">{tier} model</Label>
+              <Input
+                placeholder={cfg.provider === "moonshot" ? "kimi-k2-0711-preview" : "provider default"}
+                value={cfg.models[tier]}
+                onChange={(e) => setCfg({ ...cfg, models: { ...cfg.models, [tier]: e.target.value } })}
+              />
+            </div>
+          ))}
+        </div>
+        <p className="text-[11px] text-muted-foreground">Leave a model blank to use the provider default. Same model on all three tiers is fine.</p>
+        <div className="flex justify-end">
+          <Button onClick={save} disabled={busy}>
+            {busy ? <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden="true" /> : null}
+            {saved ? "Saved" : "Set as brain"}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 function RoutingSection({ data }: { data: Snapshot }) {
   const r = data.routing
   const tierMeta: Record<string, { desc: string; envVar: string }> = {
@@ -187,6 +269,7 @@ function RoutingSection({ data }: { data: Snapshot }) {
   }
   return (
     <div className="flex flex-col gap-4">
+      <ModelBrainCard data={data} />
       <Card className="surface-raised border-0">
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -527,11 +610,15 @@ function KeysSection({ data, onSaved }: { data: Snapshot; onSaved: () => void })
     setBusy(true)
     setError("")
     try {
-      await saveApiKeyAction(provider, keyValue, label)
-      setKeyValue("")
-      setLabel("")
-      setProvider("")
-      onSaved()
+      const r = await saveApiKeyAction(provider, keyValue, label)
+      if (r.ok) {
+        setKeyValue("")
+        setLabel("")
+        setProvider("")
+        onSaved()
+      } else {
+        setError(r.error ?? "Failed to save key")
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save key")
     }
@@ -557,7 +644,14 @@ function KeysSection({ data, onSaved }: { data: Snapshot; onSaved: () => void })
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
-            <Select value={provider} onValueChange={(v) => setProvider(v ?? "")}>
+            <Select
+              value={provider}
+              onValueChange={(v) => {
+                setProvider(v ?? "")
+                setKeyValue("") // clear the typed key when switching providers (avoid saving to the wrong one)
+                setError("")
+              }}
+            >
               <SelectTrigger aria-label="Provider">
                 <SelectValue placeholder="Provider" />
               </SelectTrigger>

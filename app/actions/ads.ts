@@ -7,7 +7,7 @@ import { and, desc, eq } from "drizzle-orm"
 import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
 import { generateText } from "ai"
-import { getModel } from "@/lib/llm"
+import { getModelForUser } from "@/lib/llm"
 import { getAgentOverride, directiveBlock } from "@/lib/config"
 import { skillsBlockFor } from "@/lib/skills"
 import { isHiggsfieldConfigured, submitGeneration } from "@/lib/higgsfield"
@@ -52,7 +52,7 @@ export async function generateAdCreative(input: {
 
   try {
     const { text } = await generateText({
-      model: getModel("standard"), // ads.creative — structured drafting
+      model: await getModelForUser(userId, "standard"), // ads.creative — structured drafting
       system: `You are an ad creative script composer. Write ${typeGuidance}. Output STRICT JSON: {"premise": "...", "script": "...", "videoPrompt": "single text-to-video generation prompt, max 900 chars"}. JSON only, no fences.${directiveBlock(override)}${skillsCtx}`,
       prompt: `Client brief: ${input.brief}`,
     })

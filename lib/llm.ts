@@ -84,6 +84,67 @@ export function getModel(tier: ModelTier = "heavy"): Parameters<typeof import("a
   return tierEnv("GATEWAY_MODEL", tier) || process.env.GATEWAY_MODEL || GATEWAY_DEFAULTS[tier]
 }
 
+// =============================================================================
+// USER-CONFIGURABLE BRAIN (Settings → Model Brain) + VAULT-AWARE KEYS
+//
+// The env-based getModel() above stays as the zero-config fallback. This path
+// lets the operator pick a provider + models in the UI and BRING THEIR OWN KEY
+// via the encrypted vault (openrouter / moonshot). Every agent calls
+// getModelForUser(userId, tier); it resolves: user's llm_brain config → vault
+// key (or env) → an OpenAI-compatible provider (or a plain gateway string).
+// =============================================================================
+
+const MOONSHOT_BASE = "https://api.moonshot.ai/v1"
+const MOONSHOT_DEFAULTS: Record<ModelTier, string> = {
+  light: "kimi-k2-0711-preview",
+  standard: "kimi-k2-0711-preview",
+  heavy: "kimi-k2-0711-preview",
+}
+const OPENROUTER_DEFAULTS: Record<ModelTier, string> = {
+  light: "google/gemini-2.5-flash-lite",
+  standard: "google/gemini-2.5-flash",
+  heavy: "anthropic/claude-sonnet-4.5",
+}
+
+type BrainModel = Parameters<typeof import("ai").generateText>[0]["model"]
+
+/**
+ * Resolve the model for a user + tier, honoring their Settings → Model Brain
+ * choice and vault key. Falls back to the env-based getModel() when the user
+ * hasn't configured a brain (provider "gateway" with no overrides).
+ */
+export async function getModelForUser(userId: string, tier: ModelTier = "heavy"): Promise<BrainModel> {
+  const { getConfig, getSecret, LLM_BRAIN_DEFAULTS } = await import("@/lib/config")
+  const brain = await getConfig(userId, "llm_brain", LLM_BRAIN_DEFAULTS)
+  const override = brain.models?.[tier]?.trim()
+
+  if (brain.provider === "moonshot") {
+    const apiKey = (await getSecret(userId, "moonshot", "llm.brain")) || process.env.MOONSHOT_API_KEY
+    if (!apiKey) throw new Error("Kimi (Moonshot) selected but no key — add a Moonshot key in Settings → API Keys.")
+    const compat = createOpenAICompatible({ name: "moonshot", apiKey, baseURL: MOONSHOT_BASE })
+    return compat(override || MOONSHOT_DEFAULTS[tier])
+  }
+
+  if (brain.provider === "openrouter") {
+    const apiKey = (await getSecret(userId, "openrouter", "llm.brain")) || process.env.OPENROUTER_API_KEY
+    if (!apiKey) throw new Error("OpenRouter selected but no key — add an OpenRouter key in Settings → API Keys.")
+    const compat = createOpenAICompatible({ name: "openrouter", apiKey, baseURL: "https://openrouter.ai/api/v1" })
+    return compat(override || OPENROUTER_DEFAULTS[tier])
+  }
+
+  if (brain.provider === "custom") {
+    const apiKey = (await getSecret(userId, "openrouter", "llm.brain")) || process.env.LLM_API_KEY || process.env.OPENROUTER_API_KEY
+    const baseURL = brain.baseUrl || process.env.LLM_BASE_URL
+    if (!apiKey || !baseURL) throw new Error("Custom brain needs a base URL (Settings → Model Brain) + a key (API Keys).")
+    const compat = createOpenAICompatible({ name: "custom", apiKey, baseURL })
+    return compat(override || process.env.LLM_MODEL || "gpt-4o-mini")
+  }
+
+  // gateway (default): honor a per-tier override, else fall back to env getModel()
+  if (override) return override
+  return getModel(tier)
+}
+
 /** Human-readable description of the active brain per tier, for settings UI / diagnostics. */
 export function describeLlm(): { provider: string; models: Record<ModelTier, string>; configured: boolean } {
   const provider = activeProvider()
@@ -100,4 +161,50 @@ export function describeLlm(): { provider: string; models: Record<ModelTier, str
     return { provider, models, configured }
   }
   return { provider: "vercel-ai-gateway", models, configured: true }
+}
+
+/** Per-user brain description for the Settings UI: provider, effective models, key/env readiness. */
+export async function describeLlmForUser(
+  userId: string,
+): Promise<{ provider: string; models: Record<ModelTier, string>; configured: boolean; keySource: string }> {
+  const { getConfig, getSecret, LLM_BRAIN_DEFAULTS } = await import("@/lib/config")
+  const brain = await getConfig(userId, "llm_brain", LLM_BRAIN_DEFAULTS)
+  const eff = (tier: ModelTier, def: string) => brain.models?.[tier]?.trim() || def
+
+  if (brain.provider === "moonshot") {
+    const key = (await getSecret(userId, "moonshot", "").catch(() => null)) || process.env.MOONSHOT_API_KEY
+    return {
+      provider: "Kimi (Moonshot)",
+      models: { light: eff("light", MOONSHOT_DEFAULTS.light), standard: eff("standard", MOONSHOT_DEFAULTS.standard), heavy: eff("heavy", MOONSHOT_DEFAULTS.heavy) },
+      configured: Boolean(key),
+      keySource: key ? "ready" : "missing Moonshot key",
+    }
+  }
+  if (brain.provider === "openrouter") {
+    const key = (await getSecret(userId, "openrouter", "").catch(() => null)) || process.env.OPENROUTER_API_KEY
+    return {
+      provider: "OpenRouter",
+      models: { light: eff("light", OPENROUTER_DEFAULTS.light), standard: eff("standard", OPENROUTER_DEFAULTS.standard), heavy: eff("heavy", OPENROUTER_DEFAULTS.heavy) },
+      configured: Boolean(key),
+      keySource: key ? "ready" : "missing OpenRouter key",
+    }
+  }
+  if (brain.provider === "custom") {
+    const key = (await getSecret(userId, "openrouter", "").catch(() => null)) || process.env.LLM_API_KEY || process.env.OPENROUTER_API_KEY
+    const base = brain.baseUrl || process.env.LLM_BASE_URL || ""
+    return {
+      provider: `Custom (${base || "no base URL"})`,
+      models: { light: eff("light", "—"), standard: eff("standard", "—"), heavy: eff("heavy", "—") },
+      configured: Boolean(key && base),
+      keySource: key && base ? "ready" : "missing base URL or key",
+    }
+  }
+  // gateway
+  const env = describeLlm()
+  return {
+    provider: "Vercel AI Gateway",
+    models: { light: eff("light", env.models.light), standard: eff("standard", env.models.standard), heavy: eff("heavy", env.models.heavy) },
+    configured: Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL),
+    keySource: process.env.AI_GATEWAY_API_KEY ? "ready" : "needs AI_GATEWAY_API_KEY (or pick Kimi/OpenRouter)",
+  }
 }

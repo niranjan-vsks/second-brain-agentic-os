@@ -16,13 +16,13 @@ import { and, desc, eq, asc } from "drizzle-orm"
 import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
 
-import { getModel } from "@/lib/llm"
+import { getModelForUser } from "@/lib/llm"
 import { getAgentOverride, directiveBlock } from "@/lib/config"
 import { skillsBlockFor } from "@/lib/skills"
 
 // linkedin.compose_post / linkedin.tweak_post — prose drafting, standard tier.
 // (Previously hardcoded to a flagship model; now routed through the tiered seam.)
-const MODEL = getModel("standard")
+// per-agent model resolved inline via getModelForUser (vault-aware, user-configurable)
 
 async function getUserId() {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -89,7 +89,7 @@ export async function composeDraft(input: {
   const skillsCtx = await skillsBlockFor(userId, "linkedin_post") // Arsenal skills assigned to this agent
 
   const { text } = await generateText({
-    model: MODEL,
+    model: await getModelForUser(userId, "standard"),
     system: `You are a LinkedIn ghost-writer for a senior agentic AI engineer. Write a single LinkedIn post. ${lengthRule} Strong hook in the first line. No hashtag spam (max 3). No client names, employer internals, or proprietary stack details. No fabricated numbers or engagement bait.
 
 ${claimStatusGuard(input.claimStatus)}${styleCtx}
@@ -171,7 +171,7 @@ export async function tweakDraft(postId: number, instruction: string) {
   const trendCtx = trend ? `\n\nOriginal trend item:\nTitle: ${trend.title}\nSummary: ${trend.summary}` : ""
 
   const { text } = await generateText({
-    model: MODEL,
+    model: await getModelForUser(userId, "standard"),
     system: `You are the Tweak Agent for a LinkedIn draft-review workflow. The owner gives you tweak instructions; you revise the draft.
 
 ${claimStatusGuard(post.claimStatus)}

@@ -4,7 +4,7 @@ import { z } from "zod"
 import { db, pool } from "@/lib/db"
 import { autopays, paymentInstruments } from "@/lib/db/schema"
 import { eq, and } from "drizzle-orm"
-import { getModel } from "@/lib/llm"
+import { getModelForUser } from "@/lib/llm"
 import { SCHEMA_DESCRIPTION, validateSql } from "@/lib/os-chat"
 import { getCalendarConnection, listEvents, createEvent, deleteEvent } from "@/lib/google-calendar"
 import { orchestratorTools, getActiveLessons } from "@/lib/jarvis-orchestrator"
@@ -76,7 +76,7 @@ export async function jarvisChat(
       execute: async ({ question }) => {
         // Reuse the hardened text-to-SQL path: generate, validate, execute.
         const { text: rawSql } = await generateText({
-          model: getModel("standard"), // jarvis.query_os_data — SQL generation
+          model: await getModelForUser(userId, "standard"), // jarvis.query_os_data — SQL generation
           system: `Convert the question to a single PostgreSQL SELECT statement. Output ONLY SQL, no markdown. Always filter user-owned tables by "userId" = $1. Schema:\n${SCHEMA_DESCRIPTION}`,
           prompt: question,
         })
@@ -204,7 +204,7 @@ export async function jarvisChat(
 
   try {
     const { text } = await generateText({
-      model: getModel("heavy"), // jarvis.chat — orchestrator loop: multi-tool planning over the whole OS
+      model: await getModelForUser(userId, "heavy"), // jarvis.chat — orchestrator loop: multi-tool planning over the whole OS
       system: JARVIS_SYSTEM.replace(
         "{{TODAY}}",
         new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "full" }),

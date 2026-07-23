@@ -10,7 +10,7 @@
 import { pool, db } from "@/lib/db"
 import { osChatMessages } from "@/lib/db/schema"
 import { generateText } from "ai"
-import { getModel } from "@/lib/llm"
+import { getModelForUser } from "@/lib/llm"
 import { randomUUID } from "crypto"
 
 // Compact schema description — column names/types only, no data.
@@ -86,7 +86,7 @@ export async function answerOsQuestion(userId: string, question: string, channel
   let sqlExecuted: string | null = null
   try {
     const { text: rawSql } = await generateText({
-      model: getModel("standard"), // os_chat.text_to_sql — SQL generation
+      model: await getModelForUser(userId, "standard"), // os_chat.text_to_sql — SQL generation
       system: `You translate questions about a personal operator OS into a single read-only Postgres SELECT query.
 ${SCHEMA_DESCRIPTION}
 Rules: output ONLY the SQL, no fences, no explanation. Exactly one SELECT. Every table with a "userId" column MUST be filtered with "userId" = $1. LIMIT results to 50 rows max. Use double quotes around camelCase identifiers.`,
@@ -102,7 +102,7 @@ Rules: output ONLY the SQL, no fences, no explanation. Exactly one SELECT. Every
       const result = await pool.query(validation.sql, [userId])
       const rows = result.rows.slice(0, 50)
       const { text } = await generateText({
-        model: getModel("light"), // os_chat.summarize_rows — formatting task
+        model: await getModelForUser(userId, "light"), // os_chat.summarize_rows — formatting task
         system: "Turn this SQL result into a concise plain-English answer to the user's question. If empty, say so plainly. No markdown tables unless helpful.",
         prompt: `Question: ${question}\nRows (JSON): ${JSON.stringify(rows).slice(0, 8000)}`,
       })

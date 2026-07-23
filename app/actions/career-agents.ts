@@ -24,7 +24,7 @@ import { and, desc, eq } from "drizzle-orm"
 import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
 import { generateText } from "ai"
-import { getModel } from "@/lib/llm"
+import { getModelForUser } from "@/lib/llm"
 import { getAgentOverride, directiveBlock } from "@/lib/config"
 import { skillsBlockFor } from "@/lib/skills"
 import { randomUUID } from "crypto"
@@ -130,7 +130,7 @@ export async function evaluateJob(jobId: string) {
 
   try {
     const { text } = await generateText({
-      model: getModel("heavy"), // career.evaluate — multi-constraint rubric reasoning
+      model: await getModelForUser(userId, "heavy"), // career.evaluate — multi-constraint rubric reasoning
       system: EVALUATION_PROMPT,
       prompt: `${ctx.cvBlock}\n\n${ctx.storiesBlock}\n\nCANDIDATE SETTINGS: role families: ${ctx.settings?.enabledRoleFamilies || "not set"} · geographies: ${ctx.settings?.enabledGeographies || "not set"} · comp floor domestic: INR ${ctx.settings?.compFloorDomesticINR} · comp floor intl: ${ctx.settings?.compFloorIntlMonthly} ${ctx.settings?.compIntlCurrency}/month\n\n${compResearch}\n\nJOB: ${job.roleTitle} @ ${job.company}\nURL: ${job.jobUrl}\nGEOGRAPHY: ${job.geography}\n\nJOB DESCRIPTION:\n${job.jobDescription}`,
     })
@@ -216,7 +216,7 @@ export async function tailorResume(jobId: string) {
 
   try {
     const { text } = await generateText({
-      model: getModel("heavy"), // career.tailor_resume — never-fabricate constitution
+      model: await getModelForUser(userId, "heavy"), // career.tailor_resume — never-fabricate constitution
       system: TAILORING_PROMPT,
       prompt: `${ctx.cvBlock}\n\nEXTRACTED ATS KEYWORDS: ${job.extractedKeywords ?? "none — extract from JD"}\n\nPERSONALIZATION PLAN (from evaluation): ${report?.blockE_personalizationPlan ?? "none"}\n\nJOB: ${job.roleTitle} @ ${job.company}\n\nJOB DESCRIPTION:\n${job.jobDescription}`,
     })
@@ -323,7 +323,7 @@ export async function generateOutreach(input: {
 
   try {
     const { text } = await generateText({
-      model: getModel("standard"), // career.outreach — prose drafting
+      model: await getModelForUser(userId, "standard"), // career.outreach — prose drafting
       system: CONTACTO_PROMPT + directiveBlock(outreachOverride) + outreachSkills,
       prompt: `${ctx.cvBlock}\n\nJOB: ${job.roleTitle} @ ${job.company}\nJD EXCERPT: ${job.jobDescription.slice(0, 3000)}\n\nCONTACT: ${input.contactName} — type: ${input.contactRole}\nCONTEXT ABOUT THIS CONTACT: ${input.contactContext || "none provided"}`,
     })
@@ -372,7 +372,7 @@ export async function deepResearch(company: string, jobId?: string) {
     // Fallback: generate the paste-into-Perplexity prompt (original deep mode behavior)
     try {
       const { text } = await generateText({
-        model: getModel("standard"), // career.deep_research (prompt-generator fallback)
+        model: await getModelForUser(userId, "standard"), // career.deep_research (prompt-generator fallback)
         system: DEEP_RESEARCH_PROMPT_GENERATOR,
         prompt: `COMPANY: ${company}\n\nCANDIDATE PROFILE:\n${candidateAngle}`,
       })
@@ -400,7 +400,7 @@ export async function deepResearch(company: string, jobId?: string) {
     ]
     const allResults = (await Promise.all(queries.map((q) => webSearch(userId, q, 4).catch(() => [])))).flat()
     const { text } = await generateText({
-      model: getModel("heavy"), // career.deep_research — multi-source synthesis
+      model: await getModelForUser(userId, "heavy"), // career.deep_research — multi-source synthesis
       system: DEEP_RESEARCH_SYNTHESIS_PROMPT,
       prompt: `COMPANY: ${company}\n\nCANDIDATE PROFILE:\n${candidateAngle}\n\nSEARCH RESULTS:\n${allResults.map((r) => `- ${r.title} (${r.url}): ${r.snippet}`).join("\n")}`,
     })
@@ -438,7 +438,7 @@ export async function applyAssist(jobId: string, formQuestions: string) {
 
   try {
     const { text } = await generateText({
-      model: getModel("standard"), // career.apply_assist — grounded drafting
+      model: await getModelForUser(userId, "standard"), // career.apply_assist — grounded drafting
       system: APPLY_ASSIST_PROMPT,
       prompt: `${ctx.cvBlock}\n\nEVALUATION REPORT:\n${report ? `Block B: ${report.blockB_cvMatch}\nBlock H (pre-drafted answers): ${report.blockH_draftAnswers ?? "none"}` : "No evaluation report exists for this job."}\n\nJOB: ${job.roleTitle} @ ${job.company}\nJD: ${job.jobDescription.slice(0, 5000)}\n\nFORM QUESTIONS (pasted by candidate):\n${formQuestions}`,
     })

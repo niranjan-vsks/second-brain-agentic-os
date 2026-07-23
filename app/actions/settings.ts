@@ -20,8 +20,10 @@ import {
   META_ADS_DEFAULTS,
   GENERAL_DEFAULTS,
   CONNECTIONS_DEFAULTS,
+  LLM_BRAIN_DEFAULTS,
+  type LlmBrainConfig,
 } from "@/lib/config"
-import { describeLlm } from "@/lib/llm"
+import { describeLlm, describeLlmForUser } from "@/lib/llm"
 import { TASK_TIERS } from "@/lib/model-router"
 
 async function getUserId(): Promise<string> {
@@ -34,7 +36,7 @@ async function getUserId(): Promise<string> {
 
 export async function saveConfigAction(key: string, value: Record<string, unknown>) {
   const userId = await getUserId()
-  const allowed = new Set(["leadgen", "funnels.meta_ads", "general", "connections", "jobhunt"])
+  const allowed = new Set(["leadgen", "funnels.meta_ads", "general", "connections", "jobhunt", "llm_brain"])
   if (!allowed.has(key)) throw new Error("Unknown config key")
   const existing = await db
     .select()
@@ -56,16 +58,19 @@ export async function saveConfigAction(key: string, value: Record<string, unknow
 export async function getSettingsSnapshot() {
   const userId = await getUserId()
 
-  const [leadgen, metaAds, general, connectionsForm, keyRows, calRows, ytRows, recentSecretAccess] = await Promise.all([
-    getConfig(userId, "leadgen", LEADGEN_DEFAULTS),
-    getConfig(userId, "funnels.meta_ads", META_ADS_DEFAULTS),
-    getConfig(userId, "general", GENERAL_DEFAULTS),
-    getConfig(userId, "connections", CONNECTIONS_DEFAULTS),
-    db.select().from(apiKeys).where(eq(apiKeys.userId, userId)),
-    db.select().from(connectedAccounts).where(eq(connectedAccounts.userId, userId)),
-    db.select().from(youtubeChannels).where(eq(youtubeChannels.userId, userId)),
-    getRecentSecretAccess(userId, 20).catch(() => []),
-  ])
+  const [leadgen, metaAds, general, connectionsForm, brainConfig, brainDesc, keyRows, calRows, ytRows, recentSecretAccess] =
+    await Promise.all([
+      getConfig(userId, "leadgen", LEADGEN_DEFAULTS),
+      getConfig(userId, "funnels.meta_ads", META_ADS_DEFAULTS),
+      getConfig(userId, "general", GENERAL_DEFAULTS),
+      getConfig(userId, "connections", CONNECTIONS_DEFAULTS),
+      getConfig(userId, "llm_brain", LLM_BRAIN_DEFAULTS),
+      describeLlmForUser(userId).catch(() => ({ provider: "unknown", models: { light: "", standard: "", heavy: "" }, configured: false, keySource: "error reading brain" })),
+      db.select().from(apiKeys).where(eq(apiKeys.userId, userId)),
+      db.select().from(connectedAccounts).where(eq(connectedAccounts.userId, userId)),
+      db.select().from(youtubeChannels).where(eq(youtubeChannels.userId, userId)),
+      getRecentSecretAccess(userId, 20).catch(() => []),
+    ])
 
   const llm = describeLlm()
 
@@ -82,6 +87,8 @@ export async function getSettingsSnapshot() {
     metaAds,
     general,
     connectionsForm,
+    brainConfig,
+    brain: brainDesc,
     // Masked key metadata only — never the key material
     keys: keyRows.map((k) => ({
       provider: k.provider,
@@ -134,36 +141,62 @@ export async function getSettingsSnapshot() {
 
 // --- API key vault --------------------------------------------------------------
 
-export async function saveApiKeyAction(provider: string, key: string, label: string) {
+// Returns {ok:false,error} instead of throwing, so a missing encryption key or
+// bad input surfaces inline in the UI and never crashes the settings render.
+export async function saveApiKeyAction(provider: string, key: string, label: string): Promise<{ ok: boolean; error?: string }> {
   const userId = await getUserId()
-  if (!KEY_PROVIDERS[provider]) throw new Error("Unknown provider")
+  if (!KEY_PROVIDERS[provider]) return { ok: false, error: "Unknown provider" }
   const trimmed = key.trim()
-  if (trimmed.length < 8) throw new Error("Key looks too short")
-  if (!isCryptoConfigured()) throw new Error("CREDENTIALS_ENCRYPTION_KEY is not set — cannot store keys securely")
+  if (trimmed.length < 8) return { ok: false, error: "Key looks too short" }
+  if (!isCryptoConfigured())
+    return { ok: false, error: "CREDENTIALS_ENCRYPTION_KEY is not set on the server — add it in Vercel env vars, then redeploy, before storing keys." }
 
-  const encryptedKey = encrypt(trimmed)
-  const lastFour = trimmed.slice(-4)
+  try {
+    const encryptedKey = encrypt(trimmed)
+    const lastFour = trimmed.slice(-4)
+    const existing = await db
+      .select()
+      .from(apiKeys)
+      .where(and(eq(apiKeys.userId, userId), eq(apiKeys.provider, provider)))
+      .limit(1)
+    if (existing.length > 0) {
+      await db
+        .update(apiKeys)
+        .set({ encryptedKey, lastFour, label: label.trim(), updatedAt: new Date() })
+        .where(and(eq(apiKeys.userId, userId), eq(apiKeys.provider, provider)))
+    } else {
+      await db.insert(apiKeys).values({ id: randomUUID(), userId, provider, label: label.trim(), encryptedKey, lastFour })
+    }
+    await db.insert(secretAccessLog).values({ id: randomUUID(), userId, provider, action: "write", source: "settings.saveApiKeyAction" }).catch(() => {})
+    revalidatePath("/")
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to store key" }
+  }
+}
+
+/** Set the LLM brain (provider + optional per-tier models) — Settings → Model Brain. */
+export async function saveBrainAction(cfg: LlmBrainConfig) {
+  const userId = await getUserId()
+  const clean: LlmBrainConfig = {
+    provider: (["gateway", "openrouter", "moonshot", "custom"] as const).includes(cfg.provider) ? cfg.provider : "gateway",
+    baseUrl: (cfg.baseUrl ?? "").trim().slice(0, 200),
+    models: {
+      light: (cfg.models?.light ?? "").trim().slice(0, 100),
+      standard: (cfg.models?.standard ?? "").trim().slice(0, 100),
+      heavy: (cfg.models?.heavy ?? "").trim().slice(0, 100),
+    },
+  }
   const existing = await db
-    .select()
-    .from(apiKeys)
-    .where(and(eq(apiKeys.userId, userId), eq(apiKeys.provider, provider)))
+    .select({ id: appConfig.id })
+    .from(appConfig)
+    .where(and(eq(appConfig.userId, userId), eq(appConfig.key, "llm_brain")))
     .limit(1)
   if (existing.length > 0) {
-    await db
-      .update(apiKeys)
-      .set({ encryptedKey, lastFour, label: label.trim(), updatedAt: new Date() })
-      .where(and(eq(apiKeys.userId, userId), eq(apiKeys.provider, provider)))
+    await db.update(appConfig).set({ value: clean as unknown as Record<string, unknown>, updatedAt: new Date() }).where(and(eq(appConfig.userId, userId), eq(appConfig.key, "llm_brain")))
   } else {
-    await db.insert(apiKeys).values({
-      id: randomUUID(),
-      userId,
-      provider,
-      label: label.trim(),
-      encryptedKey,
-      lastFour,
-    })
+    await db.insert(appConfig).values({ id: randomUUID(), userId, key: "llm_brain", value: clean as unknown as Record<string, unknown> })
   }
-  await db.insert(secretAccessLog).values({ id: randomUUID(), userId, provider, action: "write", source: "settings.saveApiKeyAction" }).catch(() => {})
   revalidatePath("/")
   return { ok: true }
 }

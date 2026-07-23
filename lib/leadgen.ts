@@ -19,7 +19,7 @@ import { randomUUID } from "crypto"
 import { db } from "@/lib/db"
 import { leadgenProspects, leadgenRuns, leads } from "@/lib/db/schema"
 import { and, eq } from "drizzle-orm"
-import { getModel } from "@/lib/llm"
+import { getModelForUser } from "@/lib/llm"
 import {
   getSecret,
   getConfig,
@@ -142,6 +142,7 @@ interface Qualification {
 }
 
 async function qualifyBatch(
+  userId: string,
   businesses: DiscoveredBusiness[],
   source: string,
   icpNotes: string,
@@ -179,7 +180,7 @@ async function qualifyBatch(
 
   // standard tier with one manual escalation to heavy on parse failure
   const { text } = await generateText({
-    model: getModel("standard"), // leadgen.qualify — structured scoring against ICP
+    model: await getModelForUser(userId, "standard"), // leadgen.qualify — structured scoring against ICP
     system,
     prompt,
   })
@@ -187,7 +188,7 @@ async function qualifyBatch(
   if (first) return first
 
   const { text: retry } = await generateText({
-    model: getModel("heavy"), // leadgen.qualify escalation — retry on invalid JSON
+    model: await getModelForUser(userId, "heavy"), // leadgen.qualify escalation — retry on invalid JSON
     system,
     prompt,
   })
@@ -268,7 +269,7 @@ export async function runLeadgenAgent(
     // Qualification (with any Jarvis-set operator directive)
     const qualifyDirective = await getAgentOverride(userId, "leadgen_qualify")
     const qualifySkills = await skillsBlockFor(userId, "leadgen_qualify") // Arsenal skills
-    const quals = await qualifyBatch(fresh, source, config.icpNotes, qualifyDirective, qualifySkills)
+    const quals = await qualifyBatch(userId, fresh, source, config.icpNotes, qualifyDirective, qualifySkills)
     let qualified = 0
 
     for (let i = 0; i < fresh.length; i++) {

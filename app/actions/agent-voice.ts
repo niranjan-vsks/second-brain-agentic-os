@@ -12,7 +12,7 @@
 import { headers } from "next/headers"
 import { generateText } from "ai"
 import { auth } from "@/lib/auth"
-import { getModel } from "@/lib/llm"
+import { getModelForUser } from "@/lib/llm"
 import { AGENT_BY_KEY } from "@/lib/agent-registry"
 import { getOverlay } from "@/lib/agent-graph"
 import { getStatusSources, agentStatus, blockedReasons } from "@/lib/agent-status"
@@ -60,7 +60,7 @@ NEVER invent metrics or data you don't have; if asked for data you don't hold, s
 
   try {
     const { text } = await generateText({
-      model: getModel("light"), // agent_voice.speak — short in-character line, cheapest tier
+      model: await getModelForUser(userId, "light"), // agent_voice.speak — short in-character line, cheapest tier
       system,
       prompt,
     })

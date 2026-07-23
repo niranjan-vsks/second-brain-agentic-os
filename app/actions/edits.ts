@@ -7,7 +7,7 @@ import { and, desc, eq } from "drizzle-orm"
 import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
 import { generateText } from "ai"
-import { getModel } from "@/lib/llm"
+import { getModelForUser } from "@/lib/llm"
 import { randomUUID } from "crypto"
 
 async function getUserId() {
@@ -77,7 +77,7 @@ export async function requestEdit(videoProjectId: string, editPrompt: string) {
   if (!sourceBlobUrl) throw new Error("No source video available to edit yet.")
 
   const { text } = await generateText({
-    model: getModel("heavy"), // edits.edit_spec — constrained-vocabulary spec generation
+    model: await getModelForUser(userId, "heavy"), // edits.edit_spec — constrained-vocabulary spec generation
     system: `Convert the edit instruction into a JSON edit spec with this EXACT constrained vocabulary — an array "operations" of objects, each one of:
 {"op":"trim","startSeconds":n,"endSeconds":n}
 {"op":"captionOverlay","text":"...","startSeconds":n,"endSeconds":n,"position":"top|center|bottom"}

@@ -14,7 +14,7 @@ import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { skills, automations, automationRuns } from "@/lib/db/schema"
 import { and, desc, eq } from "drizzle-orm"
-import { getModel } from "@/lib/llm"
+import { getModelForUser } from "@/lib/llm"
 import { AGENT_KEYS } from "@/lib/config"
 import { parseSkillMarkdown, upsertSkill, isAgentKey, type ParsedSkill } from "@/lib/skills"
 import { CURATED_PACK } from "@/lib/skills-seed"
@@ -102,7 +102,7 @@ export async function ingestSkillZip(formData: FormData) {
     // No declared target agents → infer metadata with the LLM
     if (!parsed.targetAgents) {
       try {
-        const inferred = await inferSkillMeta(parsed)
+        const inferred = await inferSkillMeta(userId, parsed)
         parsed.description = parsed.description || inferred.description
         parsed.tags = parsed.tags || inferred.tags
         parsed.targetAgents = inferred.targetAgents
@@ -244,7 +244,7 @@ export async function ingestSkillRepo(repoUrl: string) {
       // Auto-target relevant agents when the file didn't declare them.
       if (!parsed.targetAgents) {
         try {
-          const inferred = await inferSkillMeta(parsed)
+          const inferred = await inferSkillMeta(userId, parsed)
           parsed.description = parsed.description || inferred.description
           parsed.tags = parsed.tags || inferred.tags
           parsed.targetAgents = inferred.targetAgents
@@ -264,9 +264,9 @@ export async function ingestSkillRepo(repoUrl: string) {
   return { ok: true as const, ingested, repo: `${ref.owner}/${ref.repo}`, results }
 }
 
-async function inferSkillMeta(parsed: ParsedSkill): Promise<{ description: string; tags: string; targetAgents: string }> {
+async function inferSkillMeta(userId: string, parsed: ParsedSkill): Promise<{ description: string; tags: string; targetAgents: string }> {
   const { text } = await generateText({
-    model: getModel("standard"), // arsenal.skill_extract — metadata inference for frontmatter-less skill files
+    model: await getModelForUser(userId, "standard"), // arsenal.skill_extract — metadata inference for frontmatter-less skill files
     system: `You classify a "skill" document for an operator OS with exactly these agents:
 ${Object.entries(AGENT_KEYS)
   .map(([k, v]) => `- ${k}: ${v}`)
@@ -371,7 +371,7 @@ export async function analyzeAutomation(id: string) {
 
   try {
     const { text } = await generateText({
-      model: getModel("heavy"), // arsenal.analyze_automation — workflow JSON → capability analysis + absorbable parts
+      model: await getModelForUser(userId, "heavy"), // arsenal.analyze_automation — workflow JSON → capability analysis + absorbable parts
       system: `You analyze n8n workflow JSON for a personal operator OS whose existing agents are:
 ${Object.entries(AGENT_KEYS)
   .map(([k, v]) => `- ${k}: ${v}`)

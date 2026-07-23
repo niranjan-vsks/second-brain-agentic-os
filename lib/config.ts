@@ -112,6 +112,12 @@ export const KEY_PROVIDERS: Record<
     docsUrl: "https://resend.com/docs",
     purpose: "Job-Hunt Emissary (Node 4) — actually sends the cold email when autonomy = auto",
   },
+  moonshot: {
+    label: "Kimi (Moonshot)",
+    envVar: "MOONSHOT_API_KEY",
+    docsUrl: "https://platform.moonshot.ai/console/api-keys",
+    purpose: "LLM brain — Kimi K2 via Moonshot's OpenAI-compatible API. Pick it as your default model in Settings → Model Brain",
+  },
 }
 
 /**
@@ -202,6 +208,25 @@ export const LEADGEN_DEFAULTS: LeadgenConfig = {
   qualifyThreshold: 60,
   maxPerRun: 15,
   autoPromote: false,
+}
+
+// --- LLM brain selection (Settings → Model Brain) -----------------------------
+// Which provider + models power every agent. Stored per-user in app_config
+// ("llm_brain"). Resolved (with vault keys) by lib/llm.ts getModelForUser().
+export type LlmProvider = "gateway" | "openrouter" | "moonshot" | "custom"
+
+export interface LlmBrainConfig {
+  provider: LlmProvider
+  /** custom only: OpenAI-compatible base URL */
+  baseUrl: string
+  /** optional per-tier model id overrides; empty => provider default */
+  models: { light: string; standard: string; heavy: string }
+}
+
+export const LLM_BRAIN_DEFAULTS: LlmBrainConfig = {
+  provider: "gateway",
+  baseUrl: "",
+  models: { light: "", standard: "", heavy: "" },
 }
 
 // --- Job-Hunt engine config (Node 1 Sourcer curation criteria) ----------------

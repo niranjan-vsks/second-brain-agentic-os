@@ -13,7 +13,7 @@ import { generateText } from "ai"
 import { db } from "@/lib/db"
 import { jobApplications, jobHuntRuns } from "@/lib/db/schema"
 import { and, eq } from "drizzle-orm"
-import { getModel } from "@/lib/llm"
+import { getModelForUser } from "@/lib/llm"
 import { getAutonomy } from "@/lib/agent-graph"
 import { getAgentOverride, directiveBlock } from "@/lib/config"
 import { skillsBlockFor } from "@/lib/skills"
@@ -83,7 +83,7 @@ export async function runEmissary(
   try {
     // Compose email + LinkedIn DM in one call (JSON), humanized, portfolio-aware.
     const { text } = await generateText({
-      model: getModel("standard"), // jobhunt.emissary — outreach drafting
+      model: await getModelForUser(userId, "standard"), // jobhunt.emissary — outreach drafting
       system: `You write high-intent, HUMAN-sounding job-application outreach for a Senior Agentic AI / Forward Deployed Engineer. No AI-tells, no rigid structure, no "I hope this finds you well", no em-dash walls. Warm, specific, confident, concise.
 
 ${PORTFOLIO_CONTEXT}
