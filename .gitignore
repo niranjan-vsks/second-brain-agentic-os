@@ -20,3 +20,15 @@ second-brain/.obsidian/
 second-brain/.env
 .env
 public/operator-os-source.zip
+
+# IDE/agent tool configs (not part of the app)
+.agents/
+.cursor/
+.windsurf/
+.windsurfrules
+.mcp.json
+AGENT.md
+AGENTS.md
+.github/copilot-instructions.md
+new_agents/
+content_dump/
