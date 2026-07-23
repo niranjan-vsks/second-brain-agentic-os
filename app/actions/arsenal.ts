@@ -120,6 +120,150 @@ export async function ingestSkillZip(formData: FormData) {
   return { ok: true as const, ingested, results }
 }
 
+// --- GitHub repo ingestion ------------------------------------------------------
+
+interface RepoRef {
+  owner: string
+  repo: string
+  branch?: string
+  subpath?: string
+}
+
+function parseRepoUrl(u: string): RepoRef | null {
+  const m = u
+    .trim()
+    .match(/github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?(?:\/tree\/([^/]+)(?:\/(.+))?)?\/?$/i)
+  if (!m) return null
+  return { owner: m[1], repo: m[2], branch: m[3], subpath: m[4]?.replace(/\/$/, "") }
+}
+
+function ghHeaders(): Record<string, string> {
+  const h: Record<string, string> = { Accept: "application/vnd.github+json", "User-Agent": "operator-os-arsenal" }
+  if (process.env.GITHUB_TOKEN) h.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`
+  return h
+}
+
+const EXCLUDE_NAMES = ["license", "changelog", "contributing", "security", "code_of_conduct", "pull_request_template", "issue_template"]
+const dirOf = (p: string) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "")
+const baseOf = (p: string) => p.slice(p.lastIndexOf("/") + 1)
+
+/**
+ * Ingest skills straight from a GitHub repo URL. Deterministic fetch + parse
+ * (ZERO tokens); the LLM runs ONLY to infer metadata + auto-target agents for
+ * files without frontmatter (light path). Auto-targeting is what makes an
+ * ingested skill immediately usable — the relevant agents pick it up on their
+ * next run with no manual assignment.
+ *
+ * Handles both conventions:
+ *   - SKILL.md repos (Claude/Anthropic style): each dir with a SKILL.md becomes
+ *     one skill; sibling reference/*.md are folded into its body.
+ *   - Flat catalogs (one .md per skill, e.g. agency-agents): each .md = a skill.
+ */
+export async function ingestSkillRepo(repoUrl: string) {
+  const userId = await getUserId()
+  const ref = parseRepoUrl(repoUrl)
+  if (!ref) return { ok: false as const, error: "Not a GitHub repo URL (expected github.com/owner/repo)" }
+
+  // Resolve default branch if not pinned in the URL.
+  let branch = ref.branch
+  if (!branch) {
+    try {
+      const meta = (await (await fetch(`https://api.github.com/repos/${ref.owner}/${ref.repo}`, { headers: ghHeaders(), signal: AbortSignal.timeout(15000) })).json()) as { default_branch?: string; message?: string }
+      if (!meta.default_branch) return { ok: false as const, error: meta.message === "Not Found" ? "Repo not found (private repos need a GITHUB_TOKEN)" : "Could not resolve default branch" }
+      branch = meta.default_branch
+    } catch (e) {
+      return { ok: false as const, error: e instanceof Error ? e.message : "GitHub API failed" }
+    }
+  }
+
+  // Full file tree.
+  let tree: { path: string; type: string }[]
+  try {
+    const res = await fetch(`https://api.github.com/repos/${ref.owner}/${ref.repo}/git/trees/${branch}?recursive=1`, { headers: ghHeaders(), signal: AbortSignal.timeout(20000) })
+    if (!res.ok) return { ok: false as const, error: `GitHub tree ${res.status} (rate limit? add GITHUB_TOKEN)` }
+    const data = (await res.json()) as { tree?: { path: string; type: string }[]; truncated?: boolean }
+    tree = data.tree ?? []
+  } catch (e) {
+    return { ok: false as const, error: e instanceof Error ? e.message : "GitHub tree fetch failed" }
+  }
+
+  const sub = ref.subpath ? ref.subpath + "/" : ""
+  const mdFiles = tree
+    .filter((n) => n.type === "blob")
+    .map((n) => n.path)
+    .filter((p) => (p.endsWith(".md") || p.endsWith(".txt")) && (!sub || p.startsWith(sub)))
+    .filter((p) => !EXCLUDE_NAMES.some((x) => baseOf(p).toLowerCase().includes(x)))
+  if (mdFiles.length === 0) return { ok: false as const, error: "No .md/.txt skill files found in the repo/path" }
+
+  const rawUrl = (p: string) => `https://raw.githubusercontent.com/${ref.owner}/${ref.repo}/${branch}/${p}`
+  const fetchRaw = async (p: string): Promise<string> => {
+    const res = await fetch(rawUrl(p), { signal: AbortSignal.timeout(15000) })
+    if (!res.ok) throw new Error(`raw ${res.status}`)
+    return res.text()
+  }
+
+  // Group by SKILL.md dirs; fall back to flat.
+  const skillDirs = mdFiles.filter((p) => baseOf(p).toLowerCase() === "skill.md").map(dirOf)
+  const units: { name: string; mainPath: string; refPaths: string[] }[] = []
+  if (skillDirs.length > 0) {
+    for (const dir of skillDirs) {
+      const mainPath = mdFiles.find((p) => dirOf(p) === dir && baseOf(p).toLowerCase() === "skill.md")!
+      const refPaths = mdFiles.filter((p) => p !== mainPath && (dirOf(p) === dir || dirOf(p).startsWith(dir + "/"))).slice(0, 6)
+      units.push({ name: dir || ref.repo, mainPath, refPaths })
+    }
+  } else {
+    for (const p of mdFiles.slice(0, 60)) units.push({ name: baseOf(p), mainPath: p, refPaths: [] })
+  }
+
+  const results: { unit: string; skill?: string; error?: string }[] = []
+  let ingested = 0
+  for (const u of units) {
+    if (ingested >= 60) {
+      results.push({ unit: u.name, error: "skipped — 60-skill cap" })
+      continue
+    }
+    try {
+      let raw = await fetchRaw(u.mainPath)
+      if (raw.trim().length < 40) {
+        results.push({ unit: u.name, error: "too short" })
+        continue
+      }
+      const parsed = parseSkillMarkdown(baseOf(u.mainPath), raw)
+      // Fold reference/template files into the body (capped).
+      if (u.refPaths.length > 0) {
+        const refs: string[] = []
+        for (const rp of u.refPaths) {
+          try {
+            refs.push(`\n\n## Reference: ${baseOf(rp)}\n${(await fetchRaw(rp)).slice(0, 4000)}`)
+          } catch {
+            /* skip missing ref */
+          }
+        }
+        parsed.content = (parsed.content + refs.join("")).slice(0, 20000)
+      }
+      // Auto-target relevant agents when the file didn't declare them.
+      if (!parsed.targetAgents) {
+        try {
+          const inferred = await inferSkillMeta(parsed)
+          parsed.description = parsed.description || inferred.description
+          parsed.tags = parsed.tags || inferred.tags
+          parsed.targetAgents = inferred.targetAgents
+        } catch {
+          /* library-only until assigned */
+        }
+      }
+      const { created } = await upsertSkill(userId, parsed, "repo")
+      results.push({ unit: u.name, skill: `${parsed.name}${created ? "" : " (updated)"}${parsed.targetAgents ? ` → [${parsed.targetAgents}]` : ""}` })
+      ingested++
+    } catch (e) {
+      results.push({ unit: u.name, error: e instanceof Error ? e.message : "failed" })
+    }
+  }
+
+  revalidatePath("/")
+  return { ok: true as const, ingested, repo: `${ref.owner}/${ref.repo}`, results }
+}
+
 async function inferSkillMeta(parsed: ParsedSkill): Promise<{ description: string; tags: string; targetAgents: string }> {
   const { text } = await generateText({
     model: getModel("standard"), // arsenal.skill_extract — metadata inference for frontmatter-less skill files

@@ -20,6 +20,7 @@ import {
   listAutomations,
   seedCuratedPack,
   ingestSkillZip,
+  ingestSkillRepo,
   updateSkillAction,
   deleteSkillAction,
   importAutomation,
@@ -38,6 +39,7 @@ import {
   Loader2,
   PackagePlus,
   BrainCircuit,
+  GitBranch,
 } from "lucide-react"
 
 const AGENT_LABELS: Record<string, string> = {
@@ -90,7 +92,23 @@ function SkillsPanel() {
   const { data: skills, mutate, isLoading } = useSWR<SkillRow[]>("arsenal-skills", () => listSkills())
   const [busy, setBusy] = useState("")
   const [uploadResult, setUploadResult] = useState("")
+  const [repoUrl, setRepoUrl] = useState("")
   const fileRef = useRef<HTMLInputElement>(null)
+
+  async function onRepoIngest() {
+    if (!repoUrl.trim()) return
+    setBusy("repo")
+    setUploadResult("")
+    const r = await ingestSkillRepo(repoUrl.trim())
+    setUploadResult(
+      r.ok
+        ? `Ingested ${r.ingested} skill(s) from ${r.repo}: ${r.results.filter((x) => x.skill).map((x) => x.skill).slice(0, 8).join(", ")}${r.ingested > 8 ? " …" : ""}`
+        : `Failed: ${r.error}`,
+    )
+    setBusy("")
+    if (r.ok) setRepoUrl("")
+    mutate()
+  }
 
   async function seedPack() {
     setBusy("seed")
@@ -156,6 +174,23 @@ function SkillsPanel() {
                 Install curated pack
               </Button>
             </div>
+          </div>
+          <div className="mt-2 flex gap-2">
+            <div className="relative flex-1">
+              <GitBranch className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              <Input
+                value={repoUrl}
+                onChange={(e) => setRepoUrl(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && repoUrl.trim()) onRepoIngest() }}
+                placeholder="Paste a GitHub repo URL (github.com/owner/repo) to ingest its SKILL.md files"
+                className="pl-8"
+                aria-label="GitHub repo URL"
+              />
+            </div>
+            <Button variant="secondary" onClick={onRepoIngest} disabled={busy !== "" || !repoUrl.trim()}>
+              {busy === "repo" ? <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden="true" /> : <GitBranch className="mr-1.5 size-4" aria-hidden="true" />}
+              Ingest repo
+            </Button>
           </div>
           {uploadResult ? <p className="text-xs text-muted-foreground">{uploadResult}</p> : null}
         </CardHeader>

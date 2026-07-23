@@ -376,6 +376,18 @@ export function orchestratorTools(userId: string) {
       },
     }),
 
+    ingest_skill_repo: tool({
+      description:
+        "Ingest skills from a GitHub repo URL into the Arsenal. Smartly pulls SKILL.md (+ referenced files) or a flat catalog of .md skills, auto-targets the relevant agents so they start using them, and reports what was installed. Use when the operator shares a skills repo. Deterministic fetch — only light metadata inference for files lacking frontmatter.",
+      inputSchema: z.object({ repoUrl: z.string().describe("github.com/owner/repo (optionally /tree/branch/subdir)") }),
+      execute: async ({ repoUrl }) => {
+        const { ingestSkillRepo } = await import("@/app/actions/arsenal")
+        const r = await ingestSkillRepo(repoUrl)
+        await logAction(userId, "ingest_skill_repo", r.ok ? `Ingested ${r.ingested} skills from ${r.repo}` : `Failed: ${r.error}`, { repoUrl, ok: r.ok })
+        return r
+      },
+    }),
+
     assign_skill: tool({
       description:
         "Retarget or toggle an existing skill: change which agents it injects into, or activate/deactivate it. Get IDs from list_skills.",
