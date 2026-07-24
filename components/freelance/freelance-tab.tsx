@@ -7,6 +7,7 @@ import { OutreachTracker } from "@/components/freelance/outreach-tracker"
 import { ArtifactGenerator } from "@/components/freelance/artifact-generator"
 import { AdCreativeStudio } from "@/components/freelance/ad-creative-studio"
 import { LeadgenPanel } from "@/components/freelance/leadgen-panel"
+import { MetricCard } from "@/components/ui/metric-card"
 import type { Deal, Asset, Lead, Artifact } from "@/lib/types"
 
 interface FreelanceTabProps {
@@ -24,9 +25,9 @@ export function FreelanceTab({ deals, assets, leads, artifacts }: FreelanceTabPr
   return (
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <StatCard label="PIPELINE VALUE" value={`$${totalPipeline.toLocaleString()}`} />
-        <StatCard label="ACTIVE DEALS" value={String(activeDeals)} />
-        <StatCard label="OVERDUE FOLLOW-UPS" value={String(overdueFollowUps)} alert={overdueFollowUps > 0} />
+        <MetricCard label="Pipeline Value" value={`$${totalPipeline.toLocaleString()}`} hint="Total dollar value of every open deal across the funnel (excludes handoff/retention)." />
+        <MetricCard label="Active Deals" value={activeDeals} hint="Deals currently moving through the pipeline — not yet in retention." />
+        <MetricCard label="Overdue Follow-ups" value={overdueFollowUps} accent={overdueFollowUps > 0} hint="Leads past their follow-up date. Chase these first — momentum decays fast." />
       </div>
 
       <Tabs defaultValue="pipeline" className="gap-4">

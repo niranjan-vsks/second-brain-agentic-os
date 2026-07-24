@@ -6,6 +6,7 @@ import { WeeklyPlanner } from "@/components/prep/weekly-planner"
 import { DrillBank } from "@/components/prep/drill-bank"
 import { ResourceVault } from "@/components/prep/resource-vault"
 import { PrdView } from "@/components/prep/prd-view"
+import { MetricCard } from "@/components/ui/metric-card"
 import type { Topic, Drill, Resource } from "@/lib/types"
 
 interface PrepTabProps {
@@ -23,10 +24,10 @@ export function PrepTab({ topics, drills, resources }: PrepTabProps) {
   return (
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="TOPICS DONE" value={`${done}/${topics.length}`} />
-        <StatCard label="IN PROGRESS" value={String(inProgress)} />
-        <StatCard label="P1 REMAINING" value={String(critical)} alert={critical > 0} />
-        <StatCard label="DRILLS ANSWERED" value={`${answered}/${drills.length}`} />
+        <MetricCard label="Topics Done" value={`${done}/${topics.length}`} hint="FDE syllabus topics completed across all five tracks." />
+        <MetricCard label="In Progress" value={inProgress} hint="Topics you're actively studying right now." />
+        <MetricCard label="P1 Remaining" value={critical} accent={critical > 0} hint="Critical priority-1 topics not yet done — the highest-leverage prep." />
+        <MetricCard label="Drills Answered" value={`${answered}/${drills.length}`} hint="Interview drill questions you've written and reviewed answers for." />
       </div>
 
       <Tabs defaultValue="syllabus" className="gap-4">

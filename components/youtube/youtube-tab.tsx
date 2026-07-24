@@ -6,6 +6,7 @@ import { VideoPipeline } from "@/components/youtube/video-pipeline"
 import { VideoReviewQueue } from "@/components/youtube/video-review-queue"
 import { ChannelSettings } from "@/components/youtube/channel-settings"
 import { VideoAnalytics } from "@/components/youtube/video-analytics"
+import { MetricCard } from "@/components/ui/metric-card"
 import type { YoutubeChannel, VideoProject, PipelineSettings, YoutubeVideoRow } from "@/lib/types"
 
 interface YoutubeTabProps {
@@ -26,10 +27,10 @@ export function YoutubeTab({ channels, projects, settings, videos }: YoutubeTabP
   return (
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Pending Review" value={pending} accent={pending > 0} />
-        <StatCard label="In Flight" value={inFlight} />
-        <StatCard label="Published" value={published} />
-        <StatCard label="Failed" value={failed} accent={failed > 0} />
+        <MetricCard label="Pending Review" value={pending} accent={pending > 0} hint="Generated videos waiting for your approval before they upload." />
+        <MetricCard label="In Flight" value={inFlight} hint="Projects mid-pipeline: scripting, generating, or uploading right now." />
+        <MetricCard label="Published" value={published} hint="Videos live on YouTube." />
+        <MetricCard label="Failed" value={failed} accent={failed > 0} hint="Projects that errored — usually a missing key or a generation failure." />
       </div>
 
       <Tabs defaultValue="pipeline">

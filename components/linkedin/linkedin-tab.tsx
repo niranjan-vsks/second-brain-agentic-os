@@ -6,6 +6,7 @@ import { ReviewQueue } from "@/components/linkedin/review-queue"
 import { PostCalendar } from "@/components/linkedin/post-calendar"
 import { PublishedLog } from "@/components/linkedin/published-log"
 import { StyleVault } from "@/components/linkedin/style-vault"
+import { MetricCard } from "@/components/ui/metric-card"
 import type { TrendItem, LinkedinPost, WritingSample, VoicePreference } from "@/lib/types"
 
 interface LinkedinTabProps {
@@ -31,10 +32,10 @@ export function LinkedinTab({ trends, posts, samples, preferences }: LinkedinTab
   return (
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard label="PUBLISHED" value={`${published.length} all-time / ${publishedThisMonth} this month`} />
-        <StatCard label="PENDING REVIEW" value={String(pendingReview)} alert={pendingReview > 0} />
-        <StatCard label="SCHEDULED" value={String(scheduled)} />
-        <StatCard label="ENGAGEMENT LOGGED" value={engagement.toLocaleString()} />
+        <MetricCard label="Published" value={published.length} hint={`Posts live on LinkedIn — ${publishedThisMonth} of them this month.`} />
+        <MetricCard label="Pending Review" value={pendingReview} accent={pendingReview > 0} hint="AI drafts waiting for your approval before they can be scheduled." />
+        <MetricCard label="Scheduled" value={scheduled} hint="Approved posts queued on the calendar to publish automatically." />
+        <MetricCard label="Engagement" value={engagement.toLocaleString()} hint="Total likes + comments + shares logged across all published posts." />
       </div>
 
       <Tabs defaultValue="review" className="gap-4">

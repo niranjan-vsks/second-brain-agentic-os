@@ -198,15 +198,19 @@
     background-size: 100% 3px;
   }
 
-  /* Layered card depth: hairline top-light + ambient shadow */
+  /* Layered card depth: now translucent glass with a hairline top-light and
+     a deeper 3D ambient shadow. Lifts every card app-wide at once. */
   .surface-raised {
     background:
-      linear-gradient(180deg, oklch(1 0 0 / 3.5%) 0%, oklch(1 0 0 / 0%) 45%),
-      var(--card);
-    border: 1px solid var(--border);
+      linear-gradient(160deg, oklch(1 0 0 / 5%) 0%, oklch(1 0 0 / 0.5%) 46%, oklch(0 0 0 / 4%) 100%),
+      color-mix(in oklch, var(--card) 86%, transparent);
+    backdrop-filter: blur(12px) saturate(1.2);
+    -webkit-backdrop-filter: blur(12px) saturate(1.2);
+    border: 1px solid oklch(1 0 0 / 9%);
     box-shadow:
-      0 1px 0 oklch(1 0 0 / 5%) inset,
-      0 8px 24px -12px oklch(0 0 0 / 55%);
+      0 1px 0 oklch(1 0 0 / 7%) inset,
+      0 -1px 0 oklch(0 0 0 / 22%) inset,
+      0 16px 38px -22px oklch(0 0 0 / 66%);
   }
   .surface-glow {
     box-shadow:
