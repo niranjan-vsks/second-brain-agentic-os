@@ -43,6 +43,11 @@
   --color-status-success: var(--status-success);
   --color-status-pending: var(--status-pending);
   --color-status-error: var(--status-error);
+  --color-accent-cyan: var(--accent-cyan);
+  --color-accent-blue: var(--accent-blue);
+  --color-accent-red: var(--accent-red);
+  --color-accent-magenta: var(--accent-magenta);
+  --color-accent-orange: var(--accent-orange);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -54,50 +59,56 @@
 
 :root {
   color-scheme: dark;
-  /* Mission-control dark: deep near-black with a faint green cast, layered surfaces */
-  --background: oklch(0.13 0.007 160);
-  --foreground: oklch(0.94 0.005 150);
-  --card: oklch(0.17 0.008 160);
-  --card-foreground: oklch(0.94 0.005 150);
-  --popover: oklch(0.18 0.009 160);
-  --popover-foreground: oklch(0.94 0.005 150);
-  /* Emerald primary */
-  --primary: oklch(0.78 0.16 160);
-  --primary-foreground: oklch(0.15 0.01 160);
-  --secondary: oklch(0.23 0.01 160);
-  --secondary-foreground: oklch(0.94 0.005 150);
-  --muted: oklch(0.21 0.008 160);
-  --muted-foreground: oklch(0.64 0.008 155);
-  --accent: oklch(0.24 0.012 160);
-  --accent-foreground: oklch(0.94 0.005 150);
-  --destructive: oklch(0.62 0.19 25);
-  --success: oklch(0.78 0.16 160);
-  --warning: oklch(0.8 0.14 80);
-  --border: oklch(1 0 0 / 8%);
-  --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.78 0.16 160 / 60%);
-  --chart-1: oklch(0.78 0.16 160);
-  --chart-2: oklch(0.8 0.14 80);
-  --chart-3: oklch(0.65 0.008 155);
-  --chart-4: oklch(0.45 0.01 160);
-  --chart-5: oklch(0.3 0.01 160);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.15 0.008 160);
-  --sidebar-foreground: oklch(0.94 0.005 150);
-  --sidebar-primary: oklch(0.78 0.16 160);
-  --sidebar-primary-foreground: oklch(0.15 0.01 160);
-  --sidebar-accent: oklch(0.23 0.01 160);
-  --sidebar-accent-foreground: oklch(0.94 0.005 150);
-  --sidebar-border: oklch(1 0 0 / 8%);
-  --sidebar-ring: oklch(0.78 0.16 160 / 60%);
+  /* Mission-control dark: deep blue-black, slightly lifted surfaces for contrast */
+  --background: oklch(0.145 0.012 250);
+  --foreground: oklch(0.95 0.006 240);
+  --card: oklch(0.2 0.014 250);
+  --card-foreground: oklch(0.95 0.006 240);
+  --popover: oklch(0.21 0.015 250);
+  --popover-foreground: oklch(0.95 0.006 240);
+  /* Refined teal-cyan primary — calmer, premium, not a glaring emerald */
+  --primary: oklch(0.74 0.11 195);
+  --primary-foreground: oklch(0.16 0.02 240);
+  --secondary: oklch(0.27 0.016 250);
+  --secondary-foreground: oklch(0.95 0.006 240);
+  --muted: oklch(0.24 0.014 250);
+  --muted-foreground: oklch(0.68 0.014 245);
+  --accent: oklch(0.28 0.02 250);
+  --accent-foreground: oklch(0.95 0.006 240);
+  --destructive: oklch(0.63 0.2 22);
+  --success: oklch(0.74 0.11 168);
+  --warning: oklch(0.78 0.13 70);
+  --border: oklch(1 0 0 / 9%);
+  --input: oklch(1 0 0 / 13%);
+  --ring: oklch(0.74 0.11 195 / 55%);
+  /* Expanded accent palette (cyan / copper-sulphate blue / red / magenta / orange) */
+  --accent-cyan: oklch(0.78 0.13 205);
+  --accent-blue: oklch(0.62 0.16 255);
+  --accent-red: oklch(0.64 0.2 22);
+  --accent-magenta: oklch(0.66 0.21 340);
+  --accent-orange: oklch(0.74 0.16 55);
+  --chart-1: oklch(0.74 0.11 195);
+  --chart-2: oklch(0.62 0.16 255);
+  --chart-3: oklch(0.66 0.21 340);
+  --chart-4: oklch(0.74 0.16 55);
+  --chart-5: oklch(0.5 0.02 250);
+  --radius: 0.7rem;
+  --sidebar: oklch(0.17 0.013 250);
+  --sidebar-foreground: oklch(0.95 0.006 240);
+  --sidebar-primary: oklch(0.74 0.11 195);
+  --sidebar-primary-foreground: oklch(0.16 0.02 240);
+  --sidebar-accent: oklch(0.27 0.016 250);
+  --sidebar-accent-foreground: oklch(0.95 0.006 240);
+  --sidebar-border: oklch(1 0 0 / 9%);
+  --sidebar-ring: oklch(0.74 0.11 195 / 55%);
   /* Elevation layers for the 3D feel */
-  --surface-1: oklch(0.17 0.008 160);
-  --surface-2: oklch(0.2 0.009 160);
-  --surface-3: oklch(0.24 0.01 160);
+  --surface-1: oklch(0.2 0.014 250);
+  --surface-2: oklch(0.24 0.015 250);
+  --surface-3: oklch(0.28 0.016 250);
   /* Traffic-light status semantics (Agent Playground + status chips) */
-  --status-success: oklch(0.78 0.16 160);
-  --status-pending: oklch(0.82 0.15 85);
-  --status-error: oklch(0.65 0.2 25);
+  --status-success: oklch(0.76 0.13 168);
+  --status-pending: oklch(0.8 0.14 75);
+  --status-error: oklch(0.66 0.2 22);
   /* Motion tokens for consistent, premium micro-interactions */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --dur-fast: 150ms;
@@ -118,11 +129,11 @@
   .glass-card {
     position: relative;
     background:
-      linear-gradient(160deg, oklch(1 0 0 / 7%) 0%, oklch(1 0 0 / 1.5%) 42%, oklch(0 0 0 / 6%) 100%),
-      color-mix(in oklch, var(--card) 78%, transparent);
-    backdrop-filter: blur(16px) saturate(1.35);
-    -webkit-backdrop-filter: blur(16px) saturate(1.35);
-    border: 1px solid oklch(1 0 0 / 10%);
+      linear-gradient(160deg, oklch(1 0 0 / 6%) 0%, oklch(1 0 0 / 1%) 42%, oklch(0 0 0 / 8%) 100%),
+      color-mix(in oklch, var(--card) 94%, transparent);
+    backdrop-filter: blur(14px) saturate(1.25);
+    -webkit-backdrop-filter: blur(14px) saturate(1.25);
+    border: 1px solid oklch(1 0 0 / 11%);
     border-radius: var(--radius-xl);
     box-shadow:
       0 1px 0 oklch(1 0 0 / 9%) inset,
@@ -190,22 +201,33 @@
   .flip-back {
     transform: rotateY(180deg);
   }
+  /* SOLID face for flip cards — never use backdrop-filter on a 3D-rotated
+     element (it makes the face vanish mid-rotation in Chrome). This is opaque
+     glass-look via gradients only. */
+  .metric-face {
+    background:
+      radial-gradient(120% 90% at 0% 0%, oklch(1 0 0 / 5%), transparent 55%),
+      linear-gradient(160deg, var(--surface-2) 0%, var(--card) 60%);
+    border: 1px solid oklch(1 0 0 / 10%);
+    border-radius: var(--radius-xl);
+    box-shadow:
+      0 1px 0 oklch(1 0 0 / 8%) inset,
+      0 -1px 0 oklch(0 0 0 / 22%) inset,
+      0 16px 34px -22px oklch(0 0 0 / 62%);
+  }
 
-  /* Sci-fi corner ticks for framed panels (subtle, not neon slop) */
+  /* Sci-fi scan texture (subtle, tracks the primary hue) */
   .scanline-edge {
-    background-image:
-      linear-gradient(oklch(0.78 0.16 160 / 3%) 1px, transparent 1px);
+    background-image: linear-gradient(color-mix(in oklch, var(--primary) 4%, transparent) 1px, transparent 1px);
     background-size: 100% 3px;
   }
 
-  /* Layered card depth: now translucent glass with a hairline top-light and
-     a deeper 3D ambient shadow. Lifts every card app-wide at once. */
+  /* Layered card depth: near-opaque premium surface (readable, not faded) with
+     a hairline top-light + 3D ambient shadow. Lifts every card app-wide. */
   .surface-raised {
     background:
-      linear-gradient(160deg, oklch(1 0 0 / 5%) 0%, oklch(1 0 0 / 0.5%) 46%, oklch(0 0 0 / 4%) 100%),
-      color-mix(in oklch, var(--card) 86%, transparent);
-    backdrop-filter: blur(12px) saturate(1.2);
-    -webkit-backdrop-filter: blur(12px) saturate(1.2);
+      linear-gradient(160deg, oklch(1 0 0 / 5%) 0%, oklch(1 0 0 / 0.5%) 46%, oklch(0 0 0 / 5%) 100%),
+      var(--card);
     border: 1px solid oklch(1 0 0 / 9%);
     box-shadow:
       0 1px 0 oklch(1 0 0 / 7%) inset,
@@ -215,8 +237,8 @@
   .surface-glow {
     box-shadow:
       0 1px 0 oklch(1 0 0 / 5%) inset,
-      0 0 0 1px oklch(0.78 0.16 160 / 12%),
-      0 8px 32px -10px oklch(0.78 0.16 160 / 14%);
+      0 0 0 1px color-mix(in oklch, var(--primary) 14%, transparent),
+      0 8px 32px -10px color-mix(in oklch, var(--primary) 16%, transparent);
   }
   /* Faint blueprint grid backdrop */
   .grid-backdrop {
@@ -258,7 +280,7 @@
     animation: node-pulse 1.4s var(--ease-out) infinite;
   }
   .node-glow-idle {
-    opacity: 0.82;
+    opacity: 0.95;
     border-color: var(--border);
     box-shadow:
       0 1px 0 oklch(1 0 0 / 5%) inset,

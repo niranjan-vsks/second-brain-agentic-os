@@ -144,11 +144,11 @@ const SECTIONS: Record<
     description: "Tool-calling assistant with voice: your data, calendar, and autopays.",
   },
   arsenal: {
-    label: "Arsenal",
+    label: "Connection Hub",
     group: "Assistant",
     icon: Layers,
-    title: "Arsenal",
-    description: "Skills and automations: ingest capabilities, absorb workflows, and power up the agents.",
+    title: "Connection Hub",
+    description: "Skills, automations, and connectors: ingest capabilities, absorb workflows, and power up the agents.",
   },
   playground: {
     label: "Agent Playground",
@@ -289,7 +289,7 @@ export function Dashboard({
                 className={`gap-1.5 text-[13px] ${active === "arsenal" ? "bg-accent text-foreground" : "text-muted-foreground"}`}
               >
                 <Layers className="size-3.5 text-primary" aria-hidden="true" />
-                Arsenal
+                Connection Hub
               </Button>
               <Button
                 variant="ghost"
@@ -298,7 +298,7 @@ export function Dashboard({
                 className={`gap-1.5 text-[13px] ${active === "playground" ? "bg-accent text-foreground" : "text-muted-foreground"}`}
               >
                 <Workflow className="size-3.5 text-primary" aria-hidden="true" />
-                Playground
+                Agent Playground
               </Button>
             </nav>
 
@@ -353,7 +353,9 @@ export function Dashboard({
             </span>
             <div className="flex flex-col gap-1">
               <span className="text-micro text-primary/90">{section.group}</span>
-              <h1 className="text-xl font-semibold tracking-tight text-balance md:text-2xl">{section.title}</h1>
+              <h1 className="bg-gradient-to-b from-foreground to-foreground/70 bg-clip-text text-2xl font-bold tracking-[-0.02em] text-balance text-transparent md:text-[2rem] md:leading-[1.1]">
+                {section.title}
+              </h1>
               <p className="max-w-2xl text-sm text-muted-foreground text-pretty">{section.description}</p>
             </div>
           </div>

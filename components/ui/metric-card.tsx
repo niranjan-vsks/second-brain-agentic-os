@@ -38,7 +38,7 @@ export function MetricCard({
     <div className="flip-card h-32 select-none" tabIndex={0} aria-label={`${label}: ${value}. ${hint}`}>
       <div className="flip-card-inner">
         {/* Front */}
-        <div className={`flip-face glass-card p-4 ${accent ? "surface-glow" : ""}`}>
+        <div className={`flip-face metric-face p-4 ${accent ? "surface-glow" : ""}`}>
           <div className="flex items-start justify-between">
             <span className="text-micro text-muted-foreground">{label}</span>
             {status ? (
@@ -53,7 +53,7 @@ export function MetricCard({
           <span className="mt-auto text-[10px] text-muted-foreground/60">hover for detail</span>
         </div>
         {/* Back */}
-        <div className="flip-face flip-back glass-card scanline-edge p-4">
+        <div className="flip-face flip-back metric-face scanline-edge p-4">
           <div className="flex items-center gap-1.5">
             {icon ? <span className="text-primary">{icon}</span> : null}
             <span className="text-micro text-primary">{label}</span>
