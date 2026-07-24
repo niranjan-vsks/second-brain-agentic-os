@@ -215,6 +215,26 @@
       0 -1px 0 oklch(0 0 0 / 22%) inset,
       0 16px 34px -22px oklch(0 0 0 / 62%);
   }
+  /* Subtle 3D tilt + lift on hover — robust, no flip/backface tricks */
+  .metric-tilt {
+    transform: perspective(900px) rotateX(0deg) translateY(0);
+    transition:
+      transform var(--dur-med) var(--ease-out),
+      box-shadow var(--dur-med) var(--ease-out),
+      border-color var(--dur-med) var(--ease-out);
+    will-change: transform;
+  }
+  .metric-tilt:hover,
+  .metric-tilt:focus-visible {
+    transform: perspective(900px) rotateX(6deg) translateY(-4px) scale(1.012);
+    border-color: color-mix(in oklch, var(--primary) 28%, oklch(1 0 0 / 10%));
+    box-shadow:
+      0 1px 0 oklch(1 0 0 / 10%) inset,
+      0 -1px 0 oklch(0 0 0 / 22%) inset,
+      0 26px 50px -26px oklch(0 0 0 / 72%),
+      0 0 34px -14px color-mix(in oklch, var(--primary) 24%, transparent);
+    outline: none;
+  }
 
   /* --- Jarvis orb: glowing shockwaves + ECG heartbeat -------------------- */
   .orb-shockwave {
