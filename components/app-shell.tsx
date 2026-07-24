@@ -306,7 +306,7 @@ export function AppShell({ userName, children }: { userName: string; children: R
           </span>
           <div className="flex flex-col gap-1">
             <span className="text-micro text-primary/90">{section.group}</span>
-            <h1 className="bg-gradient-to-b from-foreground to-foreground/70 bg-clip-text text-2xl font-bold tracking-[-0.02em] text-balance text-transparent md:text-[2rem] md:leading-[1.1]">
+            <h1 className="text-2xl font-bold tracking-[-0.02em] text-balance text-foreground md:text-[2rem] md:leading-[1.1]">
               {section.title}
             </h1>
             <p className="max-w-2xl text-sm text-muted-foreground text-pretty">{section.description}</p>

@@ -14,7 +14,8 @@ import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { getSettingsSnapshot, saveConfigAction, saveApiKeyAction, deleteApiKeyAction, saveBrainAction, applyRecommendedRoutingAction, saveRoutingAction } from "@/app/actions/settings"
+import { getSettingsSnapshot, saveConfigAction, saveApiKeyAction, deleteApiKeyAction, validateApiKeyAction, verifyStoredKeyAction, saveBrainAction, applyRecommendedRoutingAction, saveRoutingAction } from "@/app/actions/settings"
+import type { KeyValidation } from "@/lib/key-validation"
 import {
   Settings2,
   Cpu,
@@ -24,6 +25,8 @@ import {
   Filter,
   CheckCircle2,
   XCircle,
+  AlertTriangle,
+  HelpCircle,
   Trash2,
   ExternalLink,
   Loader2,
@@ -780,19 +783,57 @@ function ConnectionsSection({
 
 // --- API Keys --------------------------------------------------------------------
 
+function ValidationRow({ v }: { v: KeyValidation }) {
+  const map = {
+    valid: { icon: CheckCircle2, cls: "text-status-success", ring: "border-status-success/30 bg-status-success/10" },
+    invalid: { icon: XCircle, cls: "text-destructive", ring: "border-destructive/30 bg-destructive/10" },
+    error: { icon: AlertTriangle, cls: "text-status-pending", ring: "border-status-pending/30 bg-status-pending/10" },
+    unverified: { icon: HelpCircle, cls: "text-muted-foreground", ring: "border-border bg-secondary" },
+  }[v.status]
+  const Icon = map.icon
+  return (
+    <div className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-sm ${map.ring}`}>
+      <Icon className={`mt-0.5 size-4 shrink-0 ${map.cls}`} aria-hidden="true" />
+      <div className="min-w-0">
+        <p className={map.cls}>{v.message}</p>
+        {v.detail ? <p className="mt-0.5 break-words font-mono text-[11px] text-muted-foreground">{v.detail}</p> : null}
+      </div>
+    </div>
+  )
+}
+
 function KeysSection({ data, onSaved }: { data: Snapshot; onSaved: () => void }) {
   const [provider, setProvider] = useState("")
   const [keyValue, setKeyValue] = useState("")
   const [label, setLabel] = useState("")
   const [busy, setBusy] = useState(false)
+  const [testing, setTesting] = useState(false)
   const [error, setError] = useState("")
+  const [result, setResult] = useState<KeyValidation | null>(null)
+  // Per-stored-key re-verify results, keyed by provider id.
+  const [verifyBusy, setVerifyBusy] = useState<string | null>(null)
+  const [verifyResults, setVerifyResults] = useState<Record<string, KeyValidation>>({})
 
   const stored = new Map(data.keys.map((k) => [k.provider, k]))
+
+  async function test() {
+    if (!provider || !keyValue) return
+    setTesting(true)
+    setError("")
+    setResult(null)
+    try {
+      setResult(await validateApiKeyAction(provider, keyValue))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Test failed")
+    }
+    setTesting(false)
+  }
 
   async function save() {
     if (!provider || !keyValue) return
     setBusy(true)
     setError("")
+    setResult(null)
     try {
       const r = await saveApiKeyAction(provider, keyValue, label)
       if (r.ok) {
@@ -802,6 +843,7 @@ function KeysSection({ data, onSaved }: { data: Snapshot; onSaved: () => void })
         onSaved()
       } else {
         setError(r.error ?? "Failed to save key")
+        if (r.validation) setResult(r.validation)
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save key")
@@ -809,9 +851,25 @@ function KeysSection({ data, onSaved }: { data: Snapshot; onSaved: () => void })
     setBusy(false)
   }
 
+  async function verify(p: string) {
+    setVerifyBusy(p)
+    try {
+      const v = await verifyStoredKeyAction(p)
+      setVerifyResults((r) => ({ ...r, [p]: v }))
+    } catch (e) {
+      setVerifyResults((r) => ({ ...r, [p]: { status: "error", message: e instanceof Error ? e.message : "Verify failed" } }))
+    }
+    setVerifyBusy(null)
+  }
+
   async function remove(p: string) {
     setBusy(true)
     await deleteApiKeyAction(p)
+    setVerifyResults((r) => {
+      const next = { ...r }
+      delete next[p]
+      return next
+    })
     setBusy(false)
     onSaved()
   }
@@ -851,58 +909,84 @@ function KeysSection({ data, onSaved }: { data: Snapshot; onSaved: () => void })
               type="password"
               placeholder="Paste API key"
               value={keyValue}
-              onChange={(e) => setKeyValue(e.target.value)}
+              onChange={(e) => {
+                setKeyValue(e.target.value)
+                setResult(null)
+                setError("")
+              }}
               aria-label="API key"
             />
-            <Button onClick={save} disabled={busy || !provider || !keyValue}>
-              {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : "Store key"}
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={test} disabled={testing || busy || !provider || !keyValue}>
+                {testing ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : "Test"}
+              </Button>
+              <Button onClick={save} disabled={busy || testing || !provider || !keyValue}>
+                {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : "Store key"}
+              </Button>
+            </div>
           </div>
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          <p className="text-xs text-muted-foreground">
+            Store runs a live handshake first — a key the provider rejects is never saved. Use Test to check without storing.
+          </p>
+          {result ? <ValidationRow v={result} /> : null}
+          {error && !result ? <p className="text-sm text-destructive">{error}</p> : null}
 
           <div className="flex flex-col gap-2">
             {data.providers.map((p) => {
               const k = stored.get(p.id)
+              const vr = verifyResults[p.id]
               return (
-                <div key={p.id} className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-medium">{p.label}</p>
-                      <a
-                        href={p.docsUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-muted-foreground hover:text-foreground"
-                        aria-label={`${p.label} docs`}
-                      >
-                        <ExternalLink className="size-3" aria-hidden="true" />
-                      </a>
-                    </div>
-                    <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{p.purpose}</p>
-                    <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-                      env fallback: {p.envVar} {p.envConfigured ? "(set)" : "(unset)"}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {k ? (
-                      <>
-                        <Badge variant="outline" className="gap-1 border-primary/30 bg-primary/10 font-mono text-primary">
-                          ····{k.lastFour}
-                        </Badge>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => remove(p.id)}
-                          disabled={busy}
-                          aria-label={`Delete ${p.label} key`}
+                <div key={p.id} className="flex flex-col gap-2 rounded-lg border border-border p-3">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-medium">{p.label}</p>
+                        <a
+                          href={p.docsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-muted-foreground hover:text-foreground"
+                          aria-label={`${p.label} docs`}
                         >
-                          <Trash2 className="size-4" aria-hidden="true" />
-                        </Button>
-                      </>
-                    ) : (
-                      <StatusDot ok={p.envConfigured} okLabel="Via env" badLabel="No key" />
-                    )}
+                          <ExternalLink className="size-3" aria-hidden="true" />
+                        </a>
+                      </div>
+                      <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{p.purpose}</p>
+                      <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+                        env fallback: {p.envVar} {p.envConfigured ? "(set)" : "(unset)"}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {k ? (
+                        <>
+                          <Badge variant="outline" className="gap-1 border-primary/30 bg-primary/10 font-mono text-primary">
+                            ····{k.lastFour}
+                          </Badge>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => verify(p.id)}
+                            disabled={verifyBusy === p.id}
+                            aria-label={`Test ${p.label} connection`}
+                          >
+                            {verifyBusy === p.id ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : "Test"}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => remove(p.id)}
+                            disabled={busy}
+                            aria-label={`Delete ${p.label} key`}
+                          >
+                            <Trash2 className="size-4" aria-hidden="true" />
+                          </Button>
+                        </>
+                      ) : (
+                        <StatusDot ok={p.envConfigured} okLabel="Via env" badLabel="No key" />
+                      )}
+                    </div>
                   </div>
+                  {vr ? <ValidationRow v={vr} /> : null}
                 </div>
               )
             })}

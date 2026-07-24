@@ -11,7 +11,7 @@ import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { appConfig, apiKeys, connectedAccounts, youtubeChannels, secretAccessLog } from "@/lib/db/schema"
 import { and, eq } from "drizzle-orm"
-import { encrypt, isCryptoConfigured } from "@/lib/crypto"
+import { encrypt, decrypt, isCryptoConfigured } from "@/lib/crypto"
 import {
   KEY_PROVIDERS,
   getConfig,
@@ -24,6 +24,7 @@ import {
   ROUTING_GROUPS,
   type LlmBrainConfig,
 } from "@/lib/config"
+import { validateKey, type KeyValidation, type ValidationContext } from "@/lib/key-validation"
 import { describeLlm, describeLlmForUser } from "@/lib/llm"
 import { TASK_TIERS } from "@/lib/model-router"
 
@@ -143,15 +144,61 @@ export async function getSettingsSnapshot() {
 
 // --- API key vault --------------------------------------------------------------
 
+// Build the validation context (self-hosted base URLs) from the user's saved
+// Connections config, so n8n/crawl4ai/browser-worker keys can be handshaked.
+async function validationCtx(userId: string): Promise<ValidationContext> {
+  const c = await getConfig(userId, "connections", CONNECTIONS_DEFAULTS)
+  return { n8nBaseUrl: c.n8nBaseUrl, crawl4aiBaseUrl: c.crawl4aiBaseUrl, browserWorkerUrl: c.browserWorkerUrl }
+}
+
+/**
+ * Live-test a typed key WITHOUT storing it (the "Test" button). Does a real
+ * handshake with the provider and reports valid / invalid / unverified / error.
+ */
+export async function validateApiKeyAction(provider: string, key: string): Promise<KeyValidation> {
+  const userId = await getUserId()
+  if (!KEY_PROVIDERS[provider]) return { status: "invalid", message: "Unknown provider" }
+  if (key.trim().length < 8) return { status: "invalid", message: "Key looks too short" }
+  return validateKey(provider, key, await validationCtx(userId))
+}
+
+/** Re-test an already-stored key (decrypts it, handshakes, never returns the key). */
+export async function verifyStoredKeyAction(provider: string): Promise<KeyValidation> {
+  const userId = await getUserId()
+  if (!KEY_PROVIDERS[provider]) return { status: "invalid", message: "Unknown provider" }
+  if (!isCryptoConfigured()) return { status: "error", message: "Encryption key not configured on the server" }
+  const rows = await db
+    .select()
+    .from(apiKeys)
+    .where(and(eq(apiKeys.userId, userId), eq(apiKeys.provider, provider)))
+    .limit(1)
+  if (rows.length === 0 || !rows[0].encryptedKey) return { status: "invalid", message: "No stored key for this provider" }
+  const value = decrypt(rows[0].encryptedKey)
+  if (!value) return { status: "error", message: "Could not decrypt the stored key" }
+  await db.insert(secretAccessLog).values({ id: randomUUID(), userId, provider, action: "read", source: "settings.verifyStoredKeyAction" }).catch(() => {})
+  return validateKey(provider, value, await validationCtx(userId))
+}
+
 // Returns {ok:false,error} instead of throwing, so a missing encryption key or
 // bad input surfaces inline in the UI and never crashes the settings render.
-export async function saveApiKeyAction(provider: string, key: string, label: string): Promise<{ ok: boolean; error?: string }> {
+// Runs a live handshake first: a definitively REJECTED key (status "invalid") is
+// never stored, so the operator can't silently save a wrong key. Unreachable
+// (network "error") or unverifiable providers still store, with the result echoed.
+export async function saveApiKeyAction(
+  provider: string,
+  key: string,
+  label: string,
+): Promise<{ ok: boolean; error?: string; validation?: KeyValidation }> {
   const userId = await getUserId()
   if (!KEY_PROVIDERS[provider]) return { ok: false, error: "Unknown provider" }
   const trimmed = key.trim()
   if (trimmed.length < 8) return { ok: false, error: "Key looks too short" }
   if (!isCryptoConfigured())
     return { ok: false, error: "CREDENTIALS_ENCRYPTION_KEY is not set on the server — add it in Vercel env vars, then redeploy, before storing keys." }
+
+  const validation = await validateKey(provider, trimmed, await validationCtx(userId))
+  if (validation.status === "invalid")
+    return { ok: false, error: `${validation.message}${validation.detail ? ` — ${validation.detail}` : ""}`, validation }
 
   try {
     const encryptedKey = encrypt(trimmed)
@@ -171,7 +218,7 @@ export async function saveApiKeyAction(provider: string, key: string, label: str
     }
     await db.insert(secretAccessLog).values({ id: randomUUID(), userId, provider, action: "write", source: "settings.saveApiKeyAction" }).catch(() => {})
     revalidatePath("/")
-    return { ok: true }
+    return { ok: true, validation }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Failed to store key" }
   }
