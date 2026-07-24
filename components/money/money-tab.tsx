@@ -22,6 +22,7 @@ import {
   disconnectCalendar,
 } from "@/app/actions/money"
 import { Plus, Trash2, ShieldAlert, CalendarCheck, CreditCard, IndianRupee, Ban } from "lucide-react"
+import { MetricCard } from "@/components/ui/metric-card"
 
 const STATUS_STYLES: Record<string, string> = {
   active: "bg-primary/10 text-primary",
@@ -65,8 +66,17 @@ export function MoneyTab() {
       return sum
     }, 0)
 
+  const activeAutopays = (pays ?? []).filter((p) => p.status === "active").length
+  const cancelRequested = (pays ?? []).filter((p) => p.status === "cancel_requested").length
+
   return (
     <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <MetricCard label="Active Autopays" value={activeAutopays} hint="Mandates + standing instructions currently charging your accounts." />
+        <MetricCard label="Monthly Burn" value={`₹${Math.round(monthlyTotal).toLocaleString("en-IN")}`} hint="Estimated recurring spend across all active autopays, normalized to monthly." />
+        <MetricCard label="Instruments" value={instruments?.length ?? 0} hint="Cards + UPI handles tracked (metadata only — never full numbers or PINs)." />
+        <MetricCard label="Cancel Requested" value={cancelRequested} accent={cancelRequested > 0} hint="Autopays you've flagged to cancel — follow the per-bank playbook to finish." />
+      </div>
       {/* Security banner + calendar connection */}
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
