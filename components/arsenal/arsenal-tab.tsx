@@ -318,6 +318,21 @@ function AutomationsPanel() {
         <CardContent className="flex flex-col gap-3">
           <div className="flex flex-col gap-2 sm:flex-row">
             <Input placeholder="Name (optional — taken from JSON if empty)" value={name} onChange={(e) => setName(e.target.value)} />
+            <input
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              id="wf-file"
+              onChange={async (e) => {
+                const f = e.target.files?.[0]
+                if (!f) return
+                setJson((await f.text()).slice(0, 200000))
+                if (!name) setName(f.name.replace(/\.json$/i, ""))
+              }}
+            />
+            <Button variant="secondary" onClick={() => document.getElementById("wf-file")?.click()}>
+              <Upload className="mr-1.5 size-4" aria-hidden="true" /> Upload .json
+            </Button>
             <Button onClick={doImport} disabled={busy !== "" || !json.trim()}>
               {busy === "import" ? <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden="true" /> : <Upload className="mr-1.5 size-4" aria-hidden="true" />}
               Import
@@ -325,7 +340,7 @@ function AutomationsPanel() {
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="wfjson" className="text-xs">
-              Workflow JSON
+              Workflow JSON — or upload the file above
             </Label>
             <Textarea
               id="wfjson"
@@ -333,7 +348,7 @@ function AutomationsPanel() {
               placeholder='{"name": "...", "nodes": [...], "connections": {...}}'
               value={json}
               onChange={(e) => setJson(e.target.value)}
-              className="font-mono text-xs"
+              className="max-h-64 resize-y overflow-auto whitespace-pre-wrap break-all font-mono text-xs"
             />
           </div>
           {msg ? <p className="text-xs text-muted-foreground">{msg}</p> : null}

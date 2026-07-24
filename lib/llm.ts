@@ -132,7 +132,7 @@ async function buildModel(
     return createOpenAICompatible({ name: "moonshot", apiKey, baseURL: MOONSHOT_BASE })(model || MOONSHOT_DEFAULTS[tier])
   }
   if (provider === "google") {
-    const apiKey = (await getSecret(userId, "google_ai", "llm.brain")) || process.env.GOOGLE_AI_API_KEY
+    const apiKey = (await getSecret(userId, "google_ai", "llm.brain")) || (process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY)
     if (!apiKey) throw new Error("Gemini (Google AI Studio) selected but no key — add a Google AI Studio key in Settings → API Keys.")
     return createOpenAICompatible({ name: "google", apiKey, baseURL: GOOGLE_BASE })(model || GOOGLE_DEFAULTS[tier])
   }
@@ -244,7 +244,7 @@ export async function describeLlmForUser(
     }
   }
   if (brain.provider === "google") {
-    const key = (await getSecret(userId, "google_ai", "").catch(() => null)) || process.env.GOOGLE_AI_API_KEY
+    const key = (await getSecret(userId, "google_ai", "").catch(() => null)) || (process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY)
     return {
       provider: "Gemini (Google AI Studio)",
       models: { light: eff("light", GOOGLE_DEFAULTS.light), standard: eff("standard", GOOGLE_DEFAULTS.standard), heavy: eff("heavy", GOOGLE_DEFAULTS.heavy) },

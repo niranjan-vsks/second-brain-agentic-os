@@ -7,6 +7,7 @@ import { ResumeStudio } from "@/components/career/resume-studio"
 import { StoryBank } from "@/components/career/story-bank"
 import { ResearchPanel } from "@/components/career/research-panel"
 import { ScannerPanel } from "@/components/career/scanner-panel"
+import { MetricCard } from "@/components/ui/metric-card"
 import { JobHuntPanel } from "@/components/career/jobhunt-panel"
 import { CareerSettingsPanel } from "@/components/career/career-settings-panel"
 import type { JobApplication, CareerSettings, InterviewStory, CompanyResearchNote, Resume } from "@/lib/types"
@@ -43,10 +44,10 @@ export function CareerTab({ jobs, settings, stories, research, masterResumes }: 
       )}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Discovered" value={discovered} accent={discovered > 0} />
-        <StatCard label="In Pipeline" value={inPipeline} />
-        <StatCard label="Applied" value={applied} />
-        <StatCard label="Interviews / Offers" value={interviews} accent={interviews > 0} />
+        <MetricCard label="Discovered" value={discovered} accent={discovered > 0} hint="Roles sourced but not yet evaluated — waiting in the pipeline." />
+        <MetricCard label="In Pipeline" value={inPipeline} hint="Being evaluated, tailored, or prepared for outreach right now." />
+        <MetricCard label="Applied" value={applied} hint="Applications submitted; awaiting a response from the company." />
+        <MetricCard label="Interviews / Offers" value={interviews} accent={interviews > 0} hint="Converted to an interview loop or a live offer. The scoreboard." />
       </div>
 
       <Tabs defaultValue="pipeline">

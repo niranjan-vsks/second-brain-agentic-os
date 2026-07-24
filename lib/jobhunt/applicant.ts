@@ -53,6 +53,27 @@ export async function runApplicant(
     return { ok: false, message: "This job has no URL to apply on.", submitted: false }
   }
 
+  // IDEMPOTENT GUARD — never apply to the same role at the same company twice,
+  // even if it was discovered on a different portal. Canonical identity =
+  // normalized(company core token) + normalized(role). If any OTHER application
+  // for this identity is already applied/in-progress, skip.
+  const canon = (s: string) =>
+    s.toLowerCase().replace(/\.(com|io|ai|co|org|net|in|dev)\b/g, "").replace(/\b(inc|llc|ltd|pvt|careers|jobs|the)\b/g, "").replace(/[^a-z0-9]+/g, "").trim()
+  const identity = `${canon(job.company)}::${canon(job.roleTitle)}`
+  const siblings = await db
+    .select({ id: jobApplications.id, company: jobApplications.company, roleTitle: jobApplications.roleTitle, status: jobApplications.status })
+    .from(jobApplications)
+    .where(eq(jobApplications.userId, userId))
+  const APPLIED = new Set(["applied", "responded", "interview", "offer", "pending_approval"])
+  const already = siblings.find(
+    (s) => s.id !== jobId && APPLIED.has(s.status) && `${canon(s.company)}::${canon(s.roleTitle)}` === identity,
+  )
+  if (already) {
+    await db.update(jobApplications).set({ status: "discarded", updatedAt: new Date() }).where(eq(jobApplications.id, jobId))
+    await db.update(jobHuntRuns).set({ status: "completed", detail: `duplicate of ${already.company} — ${already.roleTitle}; skipped` }).where(eq(jobHuntRuns.id, runId))
+    return { ok: true, message: `Already applied to this role at ${already.company} (via another portal) — skipped.`, submitted: false }
+  }
+
   const autonomy = await getAutonomy(userId, "jobhunt.applicant") // review | auto
   const doSubmit = forceSubmit || autonomy === "auto"
   const profile = await ownerProfile(userId)
