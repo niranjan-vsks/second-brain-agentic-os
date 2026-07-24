@@ -8,7 +8,10 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { getChatHistory, askOs, askJarvis } from "@/app/actions/chat"
+import { JarvisOrb } from "@/components/jarvis/jarvis-orb"
 import { Send, Loader2, Database, Mic, MicOff, Sparkles, Volume2, VolumeX, Radio } from "lucide-react"
+
+const STOP_WORDS = ["stop", "wait", "pause", "hold on", "quiet", "shut up", "enough"]
 
 // Minimal typing for the Web Speech API (not in lib.dom for all TS configs).
 interface SpeechRecognitionLike {
@@ -102,8 +105,16 @@ export function OsChat() {
     rec.interimResults = false
     rec.continuous = false
     rec.onresult = (event) => {
-      const transcript = event.results[0]?.[0]?.transcript ?? ""
-      if (transcript.trim()) submitRef.current(transcript)
+      const transcript = (event.results[0]?.[0]?.transcript ?? "").trim()
+      if (!transcript) return
+      // Conversational interrupt: "stop / wait / pause" cancels Jarvis mid-speech.
+      const low = transcript.toLowerCase()
+      if (STOP_WORDS.some((w) => low === w || low.startsWith(w + " ") || low === w + ".")) {
+        if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel()
+        setSpeaking(false)
+        return
+      }
+      submitRef.current(transcript)
     }
     rec.onend = () => {
       setListening(false)
@@ -207,6 +218,17 @@ export function OsChat() {
 
   return (
     <div className="flex flex-col gap-4">
+      {jarvisMode && (
+        <div className="glass-card surface-glow flex flex-col items-center gap-3 rounded-2xl px-6 pb-5 pt-7">
+          <JarvisOrb speaking={speaking} thinking={isPending} />
+          <div className="flex items-center gap-2">
+            <span className={`size-1.5 rounded-full ${speaking ? "bg-primary animate-pulse" : isPending ? "bg-status-pending animate-pulse" : listening ? "bg-status-pending" : "bg-primary/60"}`} />
+            <span className="text-micro text-primary">
+              {speaking ? "Jarvis speaking" : isPending ? "Jarvis thinking" : listening ? "Listening — say “stop” to interrupt" : "Jarvis online"}
+            </span>
+          </div>
+        </div>
+      )}
       <Card>
         <CardContent className="flex flex-col gap-3 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">

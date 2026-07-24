@@ -1,0 +1,618 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Scene · Orb</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  /* UI PANEL — hidden when embedded in operator_os (Jarvis orb) */
+  #ui-panel { display: none !important; }
+  #ui-panel-orig { position: fixed; top: 12px; right: 12px; background: rgba(10,10,12,.75); color: #fff;
+    font: 11px/1.4 -apple-system, system-ui, sans-serif; padding: 8px 10px; border: 1px solid rgba(255,255,255,.12);
+    border-radius: 6px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    max-width: 240px; max-height: 80vh; overflow: auto; z-index: 1000; user-select: none; }
+  #ui-toggle { background: none; border: none; color: #fff; cursor: pointer; font-size: 14px; padding: 0; }
+  #ui-body { display: none; margin-top: 6px; }
+  #ui-panel.-open #ui-body { display: block; }
+  #ui-body label { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 4px 0; }
+  #ui-body input[type=color] { width: 28px; height: 20px; border: 1px solid rgba(255,255,255,.2); border-radius: 3px; padding: 0; background: none; cursor: pointer; }
+  #ui-body input[type=range] { width: 110px; }
+  #ui-buttons { display: flex; gap: 6px; margin-top: 8px; }
+  #ui-buttons button { flex: 1; cursor: pointer; background: rgba(255,255,255,.08); color: #fff;
+    border: 1px solid rgba(255,255,255,.18); border-radius: 4px; padding: 5px 6px; font: 11px/1 sans-serif; }
+  #ui-buttons button:hover { background: rgba(255,255,255,.16); }
+  #ui-snapshot { margin: 8px 0 0; padding: 6px 8px; background: rgba(255,255,255,.05);
+    border: 1px solid rgba(255,255,255,.12); border-radius: 4px;
+    font: 10px/1.45 ui-monospace, 'SF Mono', Menlo, monospace;
+    white-space: pre-wrap; word-break: break-word; color: rgba(255,255,255,.88);
+    max-height: 240px; overflow: auto; user-select: text; cursor: text; }
+  /* END UI PANEL */
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.143.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.143.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<!-- UI PANEL — remove this block to drop the controls -->
+<div id="ui-panel">
+  <button id="ui-toggle" type="button" aria-label="Toggle controls">⚙ controls</button>
+  <div id="ui-body"></div>
+  <pre id="ui-snapshot" title="Click to select, then copy. These are the current CONFIG values."></pre>
+</div>
+<!-- END UI PANEL -->
+
+<script type="module">
+import * as THREE from 'three'
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
+import { GammaCorrectionShader } from 'three/addons/shaders/GammaCorrectionShader.js'
+import { CopyShader } from 'three/addons/shaders/CopyShader.js'
+
+/* ============================================================
+   CONFIG  — magenta→violet jewel palette; everything else is a number.
+   Ported from the AI-studio "Beyond all limits" showreel sphere
+   (`particle-sphere.tsx`): a Fibonacci-sphere of points displaced by
+   two Simplex octaves, statically coloured in view-space (pink top,
+   purple bottom, white side-edge), with a hollow angular core. Auto-
+   rotates with a slow tilt; additive glow carries the bloom-lit poles.
+============================================================ */
+const CONFIG = {
+  bgColor: '#170a2b',
+  flameColor: '#ff3db0',
+  flameColor2: '#7a2dff',
+  flameAmt: 0.18,
+  atmoColor: '#c9a8ff',
+  atmoCount: 280,
+  atmoSize: 22,
+  atmoSpeed: 1,
+  colorTop: '#ff52c7',
+  colorBottom: '#851eff',
+  colorEdge: '#dbd1ff',
+  count: 46000,
+  pointSize: 32,
+  deform: 0.135,
+  brightness: 0.65,
+  opacity: 1,
+  spin: 0.17,
+  tilt: 0.39,
+  pointerRadius: 1.76,
+  oilBulge: 0.46,
+  oilRipple: 0.445,
+  oilDrag: 1.35,
+  rippleFreq: 13,
+  rippleSpeed: 6,
+  iridescence: 0.6,
+}
+/* ---------- DEFAULTS + localStorage (load before building) ---------- */
+const DEFAULTS = JSON.parse(JSON.stringify(CONFIG))
+const STORAGE_KEY = 'getlayers:orb'
+try { const s = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'); if (s) for (const k in s) if (k in CONFIG) CONFIG[k] = s[k] } catch (e) {}
+function saveConfig() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(CONFIG)) } catch (e) {} }
+
+/* ---------- LAYERS / HELPERS / FINAL PASS ---------- */
+const LAYERS = { NONE: 0, TORUS_SCENE: 1, BLOOM_SCENE: 2, ENTIRE_SCENE: 3 }
+const Lerp = (a, b, t) => a + (b - a) * t
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
+
+function hexToVec3(hex) {
+  const n = parseInt(hex.slice(1), 16)
+  return new THREE.Vector3(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255)
+}
+
+// Composite pass + dark complementary background + samudai corner flames (atmosphere).
+const FinalPass = {
+  uniforms: {
+    iTime: { value: 0 },
+    tDiffuse: { value: null }, torusTexture: { value: null }, bloomTexture: { value: null }, haloTexture: { value: null },
+    uBg: { value: hexToVec3(CONFIG.bgColor) },
+    uFlameA: { value: hexToVec3(CONFIG.flameColor) },
+    uFlameB: { value: hexToVec3(CONFIG.flameColor2) },
+    uFlameAmt: { value: CONFIG.flameAmt }
+  },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position, 1.0); }`,
+  fragmentShader: `
+    uniform float iTime; uniform sampler2D tDiffuse; uniform sampler2D bloomTexture; uniform sampler2D torusTexture; uniform sampler2D haloTexture;
+    uniform vec3 uBg; uniform vec3 uFlameA; uniform vec3 uFlameB; uniform float uFlameAmt;
+    varying vec2 vUv;
+    vec3 warp3d(vec3 pos, float t){ float curv=.8,a=1.9,b=0.7; pos*=2.;
+      pos.x+=curv*sin(t+a*pos.y)+t*b; pos.y+=curv*cos(t+a*pos.x);
+      pos.y+=curv*sin(t+a*pos.z)+t*b; pos.z+=curv*cos(t+a*pos.y);
+      pos.z+=curv*sin(t+a*pos.x)+t*b; pos.x+=curv*cos(t+a*pos.z);
+      return 0.5+0.5*cos(pos.xyz+vec3(1,2,4)); }
+    void main(){
+      vec2 uv = 2.*vUv - 1.;
+      vec3 w = pow(warp3d(vec3(uv.x, sin(uv.y), uv.y), iTime*1.5), vec3(1.5));
+      vec3 flame = 1.5*uFlameA*w.x; flame*=w.y; flame += uFlameB*w.z;
+      flame *= smoothstep(0.25, 1., abs(uv.y));
+      float md = smoothstep(-0.7, 1., -uv.y*uv.x); flame *= md*md;
+      vec3 bg = uBg * (1.0 - 0.4 * length(uv));
+      vec3 halo = texture2D(haloTexture, vUv).xyz;
+      gl_FragColor = vec4(bg + flame*uFlameAmt + texture2D(bloomTexture, vUv).xyz + texture2D(torusTexture, vUv).xyz + texture2D(tDiffuse, vUv).xyz + halo, 1.);
+    }`
+}
+
+/* ---------- RENDERER / SCENE / CAMERA ---------- */
+const canvas = document.getElementById('scene')
+const renderer = new THREE.WebGL1Renderer({ canvas, antialias: true })
+renderer.setPixelRatio(window.devicePixelRatio)
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.VSMShadowMap
+const scene = new THREE.Scene()
+scene.background = new THREE.Color(0x000000); scene.fog = new THREE.Fog(0x000000, 0, 15)
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100)
+camera.position.set(0, 0, 3.8)
+camera.layers.enable(LAYERS.TORUS_SCENE); camera.layers.enable(LAYERS.BLOOM_SCENE); camera.layers.enable(LAYERS.ENTIRE_SCENE)
+scene.add(camera)
+
+/* ---------- COMPOSER (reduced bloom; final pass is composite-only) ---------- */
+const renderScene = new RenderPass(scene, camera)
+const torusComposer = new EffectComposer(renderer); torusComposer.renderToScreen = false
+torusComposer.addPass(renderScene)
+torusComposer.addPass(new ShaderPass(GammaCorrectionShader))
+torusComposer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.22, 0.2, 0))
+torusComposer.addPass(new ShaderPass(CopyShader))
+const bloomComposer = new EffectComposer(renderer); bloomComposer.renderToScreen = false
+bloomComposer.addPass(renderScene)
+bloomComposer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.4, 0.55, 0))
+bloomComposer.addPass(new ShaderPass(GammaCorrectionShader))
+const finalPass = new ShaderPass(FinalPass)
+finalPass.uniforms.bloomTexture.value = bloomComposer.renderTarget1.texture
+finalPass.uniforms.torusTexture.value = torusComposer.renderTarget1.texture
+const finalComposer = new EffectComposer(renderer)
+finalComposer.addPass(renderScene); finalComposer.addPass(finalPass)
+
+/* ---------- shared GLSL (3D simplex noise) ---------- */
+const SNOISE = `
+  vec3 mod289(vec3 x){return x - floor(x*(1.0/289.0))*289.0;}
+  vec4 mod289(vec4 x){return x - floor(x*(1.0/289.0))*289.0;}
+  vec4 permute(vec4 x){return mod289(((x*34.0)+1.0)*x);}
+  vec4 taylorInvSqrt(vec4 r){return 1.79284291400159 - 0.85373472095314*r;}
+  float snoise(vec3 v){
+    const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+    const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+    vec3 i = floor(v + dot(v, C.yyy));
+    vec3 x0 = v - i + dot(i, C.xxx);
+    vec3 g = step(x0.yzx, x0.xyz);
+    vec3 l = 1.0 - g;
+    vec3 i1 = min(g.xyz, l.zxy);
+    vec3 i2 = max(g.xyz, l.zxy);
+    vec3 x1 = x0 - i1 + C.xxx;
+    vec3 x2 = x0 - i2 + C.yyy;
+    vec3 x3 = x0 - D.yyy;
+    i = mod289(i);
+    vec4 p = permute(permute(permute(
+        i.z + vec4(0.0, i1.z, i2.z, 1.0))
+        + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+        + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+    float n_ = 0.142857142857;
+    vec3 ns = n_ * D.wyz - D.xzx;
+    vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+    vec4 x_ = floor(j * ns.z);
+    vec4 y_ = floor(j - 7.0 * x_);
+    vec4 x = x_ * ns.x + ns.yyyy;
+    vec4 y = y_ * ns.x + ns.yyyy;
+    vec4 h = 1.0 - abs(x) - abs(y);
+    vec4 b0 = vec4(x.xy, y.xy);
+    vec4 b1 = vec4(x.zw, y.zw);
+    vec4 s0 = floor(b0)*2.0 + 1.0;
+    vec4 s1 = floor(b1)*2.0 + 1.0;
+    vec4 sh = -step(h, vec4(0.0));
+    vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
+    vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
+    vec3 p0 = vec3(a0.xy, h.x);
+    vec3 p1 = vec3(a0.zw, h.y);
+    vec3 p2 = vec3(a1.xy, h.z);
+    vec3 p3 = vec3(a1.zw, h.w);
+    vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
+    p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+    vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+    m = m * m;
+    return 42.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
+  }`
+
+/* ---------- POINTER (oil) — viscous world-space disturbance on the orb ----------
+   Track the cursor, ray-cast it onto the orb's sphere (front hemisphere) to get a
+   world-space contact direction, then lag that point (viscosity) and accumulate an
+   `energy` that builds with motion and decays slowly so the oil settles when idle.
+   `vel` is the tangential smear of the contact point; the vertex shader bulges,
+   ripples and drags the points from these uniforms. */
+const ORB_R = 1.0
+const mouseTarget = { x: 0, y: 0 }, mouse = { x: 0, y: 0 }
+const POINTER = { active: false, energy: 0, lastMove: performance.now() }
+const oilSmooth = new THREE.Vector3(0, 0, ORB_R), oilPrev = new THREE.Vector3(0, 0, ORB_R)
+const oilVel = new THREE.Vector3()
+window.addEventListener('mousemove', e => {
+  mouseTarget.x = (e.clientX / window.innerWidth) * 2 - 1
+  mouseTarget.y = -((e.clientY / window.innerHeight) * 2 - 1)
+  POINTER.active = true; POINTER.lastMove = performance.now()
+}, { passive: true })
+window.addEventListener('mouseout', () => { POINTER.active = false }, { passive: true })
+
+const _ndc = new THREE.Vector3(), _dir = new THREE.Vector3(), _oc = new THREE.Vector3(), _tgt = new THREE.Vector3(), _rad = new THREE.Vector3()
+function updateOil() {
+  // Contact point on the orb: ray-sphere near hit, else closest ray point pushed to the surface.
+  _tgt.copy(oilSmooth)
+  if (POINTER.active) {
+    _ndc.set(mouse.x, mouse.y, 0.5).unproject(camera)
+    _dir.copy(_ndc).sub(camera.position).normalize()
+    _oc.copy(camera.position)
+    const b = 2 * _dir.dot(_oc), c = _oc.lengthSq() - ORB_R * ORB_R
+    const disc = b * b - 4 * c
+    if (disc >= 0) { const t = (-b - Math.sqrt(disc)) / 2; _tgt.copy(_oc).addScaledVector(_dir, t) }
+    else { const tc = Math.max(0, -_dir.dot(_oc)); _tgt.copy(_oc).addScaledVector(_dir, tc).normalize().multiplyScalar(ORB_R) }
+  }
+  oilPrev.copy(oilSmooth)
+  oilSmooth.lerp(_tgt, 0.18)                                  // viscous lag
+  // tangential velocity of the contact point (strip the radial component)
+  oilVel.subVectors(oilSmooth, oilPrev).multiplyScalar(2.5)
+  _rad.copy(oilSmooth).normalize()
+  oilVel.addScaledVector(_rad, -oilVel.dot(_rad))
+  if (oilVel.length() > 0.6) oilVel.setLength(0.6)
+  // energy: builds with motion, decays slowly (oil keeps flowing then settles)
+  const speed = oilSmooth.distanceTo(oilPrev)
+  POINTER.energy *= 0.96
+  POINTER.energy = Math.max(POINTER.energy, clamp(speed * 6, 0, 1))
+  const idle = (performance.now() - POINTER.lastMove) / 1000
+  if (!POINTER.active || idle > 2.5) POINTER.energy *= 0.9
+}
+
+/* ============================================================
+   SCENE: Orb — a Fibonacci-sphere of points (radius 1) displaced along
+   its normals by two Simplex octaves. Lighting comes from the crest/trough
+   of the displacement; colour is painted in *view space* (top→pink,
+   bottom→purple, side-edge→white) so the gradient stays fixed to screen
+   while the orb rotates underneath. A hollow angular core leaves a dark
+   "eye" in the middle; the poles glow extra for a bloom-lit halo.
+============================================================ */
+class Orb {
+  constructor(scene) {
+    this.uniforms = {
+      uTime:       { value: 0 },
+      uPR:         { value: renderer.getPixelRatio() },
+      uSize:       { value: CONFIG.pointSize },
+      uDeform:     { value: CONFIG.deform },
+      uColTop:     { value: hexToVec3(CONFIG.colorTop) },
+      uColBottom:  { value: hexToVec3(CONFIG.colorBottom) },
+      uColEdge:    { value: hexToVec3(CONFIG.colorEdge) },
+      uBrightness: { value: CONFIG.brightness },
+      uOpacity:    { value: CONFIG.opacity },
+      uAppear:     { value: 0 },
+      uCursor:     { value: new THREE.Vector3(0, 0, 1) },
+      uCursorVel:  { value: new THREE.Vector3() },
+      uEnergy:     { value: 0 },
+      uPointerRadius: { value: CONFIG.pointerRadius },
+      uOilBulge:   { value: CONFIG.oilBulge },
+      uOilRipple:  { value: CONFIG.oilRipple },
+      uOilDrag:    { value: CONFIG.oilDrag },
+      uRippleFreq: { value: CONFIG.rippleFreq },
+      uRippleSpeed:{ value: CONFIG.rippleSpeed },
+      uIri:        { value: CONFIG.iridescence }
+    }
+
+    // Fibonacci sphere (golden angle) — even point distribution, radius 1.
+    const count = Math.round(CONFIG.count)
+    const positions = new Float32Array(count * 3)
+    const golden = Math.PI * (3 - Math.sqrt(5))
+    for (let i = 0; i < count; i++) {
+      const y = 1 - (i / (count - 1)) * 2
+      const r = Math.sqrt(Math.max(0, 1 - y * y))
+      const th = golden * i
+      positions[i * 3] = Math.cos(th) * r
+      positions[i * 3 + 1] = y
+      positions[i * 3 + 2] = Math.sin(th) * r
+    }
+    this.geometry = new THREE.BufferGeometry()
+    this.geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+
+    this.material = new THREE.ShaderMaterial({
+      uniforms: this.uniforms,
+      vertexShader: `
+        uniform float uTime; uniform float uSize; uniform float uPR; uniform float uDeform;
+        uniform vec3 uCursor; uniform vec3 uCursorVel; uniform float uEnergy;
+        uniform float uPointerRadius; uniform float uOilBulge; uniform float uOilRipple; uniform float uOilDrag;
+        uniform float uRippleFreq; uniform float uRippleSpeed;
+        varying float vAlpha; varying float vLit; varying float vVert; varying float vSide; varying float vOil;
+        ${SNOISE}
+        void main(){
+          vec3 p = position;
+          // soft radial deformation (two noise octaves, waves drift over time)
+          float n1 = snoise(p * 1.6 + vec3(0.0, uTime * 0.18, 0.0));
+          float n2 = snoise(p * 3.3 - vec3(uTime * 0.12));
+          float disp = n1 * 0.72 + n2 * 0.28;
+          vec3 pos = p * (1.0 + uDeform * disp);
+
+          // lighting: crests (disp>0) bright, troughs dark -> light/shadow contrast
+          float lit = smoothstep(-0.25, 0.5, disp);
+          vLit = lit;
+
+          // --- OIL: viscous disturbance fixed in WORLD space (does not spin with the orb) ---
+          vec4 wpos = modelMatrix * vec4(pos, 1.0);
+          vec3 wN = normalize(wpos.xyz);
+          float ang = acos(clamp(dot(wN, normalize(uCursor)), -1.0, 1.0));   // angular distance to contact
+          float fall = smoothstep(uPointerRadius, 0.0, ang);                 // 1 at cursor .. 0 at edge
+          float bulge = fall * fall;                                         // bead swells outward
+          float ripple = sin(ang * uRippleFreq - uTime * uRippleSpeed) * fall; // surface-tension waves
+          float oil = (bulge * uOilBulge + ripple * uOilRipple) * uEnergy;
+          wpos.xyz += wN * oil;                                              // swell + ripple along the normal
+          wpos.xyz += uCursorVel * fall * uOilDrag * uEnergy;               // smear along cursor motion
+          vOil = (bulge + max(ripple, 0.0) * 0.5) * uEnergy;
+
+          vec4 mv = viewMatrix * wpos;
+          gl_Position = projectionMatrix * mv;
+          gl_PointSize = uSize * uPR * (1.0 / max(0.1, -mv.z));
+
+          // STATIC view-space coloring (does not rotate with the orb):
+          // top <-> bottom and horizontal distance from center (sides)
+          vVert = mv.y;          // + top, - bottom
+          vSide = abs(mv.x);     // 0 center .. ~1 sides
+
+          float depth = pos.z * 0.5 + 0.5;          // front brighter
+          // hollow center — by angular radius (round, aspect-independent)
+          float angR = length(mv.xy) / max(0.1, -mv.z);
+          float hole = smoothstep(0.10, 0.20, angR);
+          // lower base alpha + strong tie to lighting => dark troughs
+          vAlpha = hole * (0.10 + 0.40 * depth) * (0.15 + 0.95 * lit);
+        }`,
+      fragmentShader: `
+        precision highp float;
+        uniform vec3 uColTop; uniform vec3 uColBottom; uniform vec3 uColEdge;
+        uniform float uBrightness; uniform float uOpacity; uniform float uAppear; uniform float uIri;
+        varying float vAlpha; varying float vLit; varying float vVert; varying float vSide; varying float vOil;
+        void main(){
+          vec2 uv = gl_PointCoord - 0.5;
+          float d = length(uv);
+          if (d > 0.5) discard;
+          float soft = smoothstep(0.5, 0.0, d);   // soft round particle (glow)
+          float core = smoothstep(0.16, 0.0, d);  // bright core
+
+          // Static gradient: top — pink, bottom — purple, sides — toward white
+          float vt = clamp(vVert * 0.5 + 0.5, 0.0, 1.0);   // 0 bottom .. 1 top
+          vec3 col = mix(uColBottom, uColTop, vt);
+          col = mix(col, uColEdge, smoothstep(0.72, 1.15, vSide));  // white only at the very side edge
+
+          col *= (0.60 + 0.55 * vLit);              // softer shadows -> cleaner color
+          col += smoothstep(0.6, 1.0, vLit) * core * vec3(0.45); // white cores on bright crests
+
+          // Extra glow on top and bottom edges of the orb (bloom-like halo top/bottom)
+          float cap = smoothstep(0.55, 1.05, abs(vVert));
+          col += col * cap * 1.1;
+          float capA = 1.0 + 0.6 * cap;             // slightly denser glow at the poles
+
+          // OIL-SLICK: thin-film iridescence over the disturbed area
+          float oilMask = clamp(vOil, 0.0, 1.0);
+          vec3 iri = 0.5 + 0.5 * cos(6.2831853 * (vOil * 2.4 + abs(vVert) * 0.3 + vec3(0.0, 0.33, 0.67)));
+          col = mix(col, iri, oilMask * uIri);
+          col += oilMask * 0.3;                     // the bead catches the light
+
+          col *= uBrightness;
+          gl_FragColor = vec4(col, soft * vAlpha * capA * uOpacity * uAppear * (1.0 + oilMask * 0.5));
+        }`,
+      transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending
+    })
+
+    this.points = new THREE.Points(this.geometry, this.material)
+    this.points.frustumCulled = false
+    this.points.layers.enable(LAYERS.ENTIRE_SCENE)
+    scene.add(this.points)
+
+    this.appearStart = performance.now()
+  }
+
+  resize() {
+    this.uniforms.uPR.value = renderer.getPixelRatio()
+  }
+
+  render() {
+    const t = performance.now() / 1000
+    this.uniforms.uTime.value = t
+    this.uniforms.uPR.value = renderer.getPixelRatio()
+
+    // slow auto-rotation with a gentle tilt wobble
+    this.points.rotation.y = t * CONFIG.spin
+    this.points.rotation.x = Math.sin(t * 0.1) * CONFIG.tilt
+
+    // oil disturbance (viscous, world-space) — feed the contact point, smear and energy
+    updateOil()
+    this.uniforms.uCursor.value.copy(oilSmooth)
+    this.uniforms.uCursorVel.value.copy(oilVel)
+    this.uniforms.uEnergy.value = POINTER.energy
+
+    const elapsed = (performance.now() - this.appearStart) / 1000
+    this.uniforms.uAppear.value = Math.max(0, Math.min(1, (elapsed - 0.2) / 1.4))
+  }
+}
+
+const sceneObj = new Orb(scene)
+
+/* ---------- ambient atmosphere particles (camera-attached drifting motes) ---------- */
+let atmoMat = null
+;(function () {
+  const N = Math.round(CONFIG.atmoCount)
+  const positions = new Float32Array(N * 3), sizes = new Float32Array(N), seeds = new Float32Array(N)
+  for (let i = 0; i < N; i++) {
+    positions[i*3] = 2*Math.random()-1; positions[i*3+1] = 2*Math.random()-1; positions[i*3+2] = 2*Math.random()-1
+    sizes[i] = CONFIG.atmoSize * (0.4 + Math.random()); seeds[i] = Math.random()
+  }
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+  g.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1))
+  g.setAttribute('seed', new THREE.Float32BufferAttribute(seeds, 1))
+  atmoMat = new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 }, uColor: { value: hexToVec3(CONFIG.atmoColor) },
+      uRes: { value: new THREE.Vector2(window.innerWidth * window.devicePixelRatio, window.innerHeight * window.devicePixelRatio) } },
+    vertexShader: `
+      attribute float size; attribute float seed; uniform float uTime; uniform vec2 uRes;
+      varying float vA;
+      vec3 warp(vec3 p, float t){ float c=0.9,a=1.9,b=0.02,s=0.05; p*=2.;
+        p.x+=c*sin(s*t+a*p.y)+t*b; p.y+=c*cos(s*t+a*p.x); p.y+=c*sin(s*t+a*p.z)+t*b;
+        p.z+=c*cos(s*t+a*p.y); p.z+=c*sin(s*t+a*p.x)+t*b; p.x+=c*cos(s*t+a*p.z);
+        return cos(p+vec3(1,2,4)); }
+      void main(){
+        vec3 v = position*2.2 + warp(position, uTime)*0.6;
+        vec4 mv = modelViewMatrix * vec4(v, 1.0);
+        float r = length(v); float farF = 1.0 - smoothstep(2.0, 3.2, r); float nearF = smoothstep(0.0, 0.3, -mv.z);
+        vA = farF * nearF;
+        gl_PointSize = size * uRes.y / 900.0 / -mv.z; gl_PointSize = max(gl_PointSize, 1.0);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform vec3 uColor; varying float vA;
+      void main(){ vec2 p = gl_PointCoord - 0.5; float l = length(p); if (l > 0.5) discard;
+        float tex = smoothstep(0.5, 0.0, l); gl_FragColor = vec4(uColor * tex, tex * vA * 0.5); }`,
+    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false
+  })
+  const pts = new THREE.Points(g, atmoMat)
+  pts.frustumCulled = false
+  pts.layers.enable(LAYERS.ENTIRE_SCENE)
+  scene.add(pts)
+  pts.onBeforeRender = () => {
+    const t = performance.now() / 1000
+    atmoMat.uniforms.uTime.value = t * CONFIG.atmoSpeed * 8.0
+    pts.position.copy(camera.position)
+    finalPass.uniforms.iTime.value = t
+  }
+})()
+
+/* ---------- CONFIG → uniforms ---------- */
+function applyConfig() {
+  finalPass.uniforms.uBg.value.copy(hexToVec3(CONFIG.bgColor))
+  finalPass.uniforms.uFlameA.value.copy(hexToVec3(CONFIG.flameColor))
+  finalPass.uniforms.uFlameB.value.copy(hexToVec3(CONFIG.flameColor2))
+  finalPass.uniforms.uFlameAmt.value = CONFIG.flameAmt
+  if (atmoMat) atmoMat.uniforms.uColor.value.copy(hexToVec3(CONFIG.atmoColor))
+  sceneObj.uniforms.uSize.value = CONFIG.pointSize
+  sceneObj.uniforms.uDeform.value = CONFIG.deform
+  sceneObj.uniforms.uColTop.value.copy(hexToVec3(CONFIG.colorTop))
+  sceneObj.uniforms.uColBottom.value.copy(hexToVec3(CONFIG.colorBottom))
+  sceneObj.uniforms.uColEdge.value.copy(hexToVec3(CONFIG.colorEdge))
+  sceneObj.uniforms.uBrightness.value = CONFIG.brightness
+  sceneObj.uniforms.uOpacity.value = CONFIG.opacity
+  sceneObj.uniforms.uPointerRadius.value = CONFIG.pointerRadius
+  sceneObj.uniforms.uOilBulge.value = CONFIG.oilBulge
+  sceneObj.uniforms.uOilRipple.value = CONFIG.oilRipple
+  sceneObj.uniforms.uOilDrag.value = CONFIG.oilDrag
+  sceneObj.uniforms.uRippleFreq.value = CONFIG.rippleFreq
+  sceneObj.uniforms.uRippleSpeed.value = CONFIG.rippleSpeed
+  sceneObj.uniforms.uIri.value = CONFIG.iridescence
+}
+
+/* ---------- RESIZE ---------- */
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight, dpr = window.devicePixelRatio
+  renderer.setPixelRatio(dpr); renderer.setSize(w, h, false)
+  camera.aspect = w / h; camera.updateProjectionMatrix()
+  for (const c of [torusComposer, bloomComposer, finalComposer]) { c.setPixelRatio(dpr); c.setSize(w, h) }
+  if (atmoMat) atmoMat.uniforms.uRes.value.set(w * dpr, h * dpr)
+  sceneObj.resize()
+}
+window.addEventListener('resize', resize); resize()
+
+/* ---------- RENDER LOOP ---------- */
+function render() {
+  requestAnimationFrame(render)
+  mouse.x = Lerp(mouse.x, mouseTarget.x, 0.12)
+  mouse.y = Lerp(mouse.y, mouseTarget.y, 0.12)
+  sceneObj.render()
+  camera.layers.set(LAYERS.TORUS_SCENE);  torusComposer.render()
+  camera.layers.set(LAYERS.BLOOM_SCENE);  bloomComposer.render()
+  camera.layers.set(LAYERS.ENTIRE_SCENE); finalComposer.render()
+}
+render()
+
+/* ===== UI (remove this block to drop the panel) ===== */
+function setupColorUI(config, apply) {
+  const panel = document.getElementById('ui-panel')
+  const toggle = document.getElementById('ui-toggle')
+  const body = document.getElementById('ui-body')
+  if (!panel) return
+  toggle.addEventListener('click', () => panel.classList.toggle('-open'))
+  const _apply = apply
+  apply = () => { _apply(); saveConfig(); renderSnapshot(config) }
+  const numericRanges = {
+    flameAmt:   { min: 0, max: 3, step: 0.05 },
+    atmoCount:  { min: 0, max: 1200, step: 10 },
+    atmoSize:   { min: 0, max: 80, step: 1 },
+    atmoSpeed:  { min: 0, max: 4, step: 0.05 },
+    count:      { min: 2000, max: 80000, step: 1000 },
+    pointSize:  { min: 1, max: 40, step: 0.5 },
+    deform:     { min: 0, max: 0.6, step: 0.005 },
+    brightness: { min: 0, max: 3, step: 0.05 },
+    opacity:    { min: 0, max: 2, step: 0.01 },
+    spin:       { min: 0, max: 1, step: 0.01 },
+    tilt:       { min: 0, max: 1, step: 0.01 },
+    pointerRadius: { min: 0.1, max: 3.14, step: 0.01 },
+    oilBulge:   { min: 0, max: 1, step: 0.01 },
+    oilRipple:  { min: 0, max: 0.6, step: 0.005 },
+    oilDrag:    { min: 0, max: 2, step: 0.05 },
+    rippleFreq: { min: 0, max: 40, step: 0.5 },
+    rippleSpeed:{ min: 0, max: 20, step: 0.5 },
+    iridescence:{ min: 0, max: 1, step: 0.01 }
+  }
+  for (const key of Object.keys(config)) {
+    const v = config[key]
+    const row = document.createElement('label')
+    row.appendChild(Object.assign(document.createElement('span'), { textContent: key }))
+    if (typeof v === 'string' && v[0] === '#') {
+      const inp = document.createElement('input')
+      inp.type = 'color'; inp.value = v
+      inp.addEventListener('input', e => { config[key] = e.target.value; apply() })
+      row.appendChild(inp)
+    } else if (typeof v === 'number') {
+      const r = numericRanges[key] || { min: 0, max: Math.max(1, v * 2), step: 0.01 }
+      const inp = document.createElement('input')
+      inp.type = 'range'; inp.min = String(r.min); inp.max = String(r.max); inp.step = String(r.step); inp.value = String(v)
+      inp.addEventListener('input', e => {
+        let val = parseFloat(e.target.value)
+        if (Number.isInteger(r.step)) val = Math.round(val / r.step) * r.step   // integer-step sliders stay integral
+        config[key] = val
+        apply()
+      })
+      row.appendChild(inp)
+    }
+    body.appendChild(row)
+  }
+  // Reload / Reset buttons
+  const btns = document.createElement('div'); btns.id = 'ui-buttons'
+  const reloadBtn = document.createElement('button'); reloadBtn.type = 'button'; reloadBtn.textContent = '⟳ reload'
+  const resetBtn  = document.createElement('button'); resetBtn.type = 'button'; resetBtn.textContent = '↺ reset'
+  reloadBtn.title = 'Reload the page — re-initialise the scene with the saved settings (applies count)'
+  resetBtn.title = 'Clear saved settings and reload with defaults'
+  reloadBtn.addEventListener('click', () => location.reload())
+  resetBtn.addEventListener('click', () => { try { localStorage.removeItem(STORAGE_KEY) } catch (e) {} ; location.reload() })
+  btns.appendChild(reloadBtn); btns.appendChild(resetBtn)
+  body.appendChild(btns)
+  panel.classList.add('-open')
+  renderSnapshot(config)
+}
+function renderSnapshot(config) {
+  const snap = document.getElementById('ui-snapshot')
+  if (!snap) return
+  const lines = ['const CONFIG = {']
+  for (const key of Object.keys(config)) {
+    const v = config[key]
+    let formatted
+    if (typeof v === 'string') formatted = "'" + v + "'"
+    else if (Number.isInteger(v)) formatted = String(v)
+    else formatted = String(parseFloat(v.toFixed(4)))
+    lines.push('  ' + key + ': ' + formatted + ',')
+  }
+  lines.push('}')
+  snap.textContent = lines.join('\n')
+}
+applyConfig()
+setupColorUI(CONFIG, applyConfig)
+/* ===== END UI ===== */
+</script>
+</body>
+</html>
