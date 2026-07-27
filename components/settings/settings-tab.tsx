@@ -17,7 +17,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { getSettingsSnapshot, saveConfigAction, saveApiKeyAction, deleteApiKeyAction, validateApiKeyAction, verifyStoredKeyAction, saveBrainAction, applyRecommendedRoutingAction, saveRoutingAction } from "@/app/actions/settings"
 import type { KeyValidation } from "@/lib/key-validation"
-import { MODEL_CATALOG, CUSTOM_MODEL_VALUE, type CatalogProvider } from "@/lib/model-catalog"
+import type { CatalogProvider } from "@/lib/model-discovery"
+import { listAvailableModelsAction } from "@/app/actions/settings"
+
+const CUSTOM_MODEL_VALUE = "__custom__"
 import {
   Settings2,
   Cpu,
@@ -49,51 +52,71 @@ const SECTIONS = [
 type SectionId = (typeof SECTIONS)[number]["id"]
 
 /**
- * Model picker: dropdown of known model ids for the given provider, plus a
- * "Custom…" option that reveals a free-text box. Falls into custom mode
- * automatically when the current value isn't in the catalog (e.g. loaded from
- * a strategy that was hand-typed, or a provider whose list is empty).
+ * Model picker: live-fetches the models actually available on the operator's
+ * own connection (vault key or env fallback) via listAvailableModelsAction —
+ * NOT a static guess list. Falls back to a free-text box if discovery fails
+ * (no key yet, provider unreachable) or the operator picks "Custom…".
  */
 function ModelPicker({
   provider,
   value,
   onChange,
+  baseUrl,
   placeholder,
   className,
 }: {
   provider: CatalogProvider
   value: string
   onChange: (v: string) => void
+  /** custom provider only: base URL to discover models from */
+  baseUrl?: string
   placeholder?: string
   className?: string
 }) {
-  const known = MODEL_CATALOG[provider] ?? []
-  const [customMode, setCustomMode] = useState(() => value !== "" && !known.includes(value))
+  const { data, isLoading } = useSWR(
+    ["model-discovery", provider, provider === "custom" ? baseUrl : ""],
+    () => listAvailableModelsAction(provider, baseUrl),
+  )
+  const known = data?.ok ? data.models : []
+  const [customMode, setCustomMode] = useState(() => value !== "" && known.length > 0 && !known.includes(value))
 
-  if (known.length === 0 || customMode) {
+  if (isLoading) {
     return (
-      <div className="flex gap-1.5">
-        <Input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder || "model id (blank = default)"}
-          className={className}
-        />
-        {known.length > 0 && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Pick from list instead"
-            title="Pick from list instead"
-            onClick={() => {
-              setCustomMode(false)
-              onChange("")
-            }}
-          >
-            <XCircle className="size-3.5" aria-hidden="true" />
-          </Button>
-        )}
+      <div className={`flex h-9 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground ${className ?? ""}`}>
+        <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+        Fetching your models…
+      </div>
+    )
+  }
+
+  const discoveryFailed = data && !data.ok
+  if (discoveryFailed || customMode) {
+    return (
+      <div className="flex flex-col gap-1">
+        <div className="flex gap-1.5">
+          <Input
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={placeholder || "model id (blank = default)"}
+            className={className}
+          />
+          {known.length > 0 && customMode && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Pick from list instead"
+              title="Pick from list instead"
+              onClick={() => {
+                setCustomMode(false)
+                onChange("")
+              }}
+            >
+              <XCircle className="size-3.5" aria-hidden="true" />
+            </Button>
+          )}
+        </div>
+        {discoveryFailed && <p className="text-[10px] text-muted-foreground">{data.error}</p>}
       </div>
     )
   }
@@ -525,6 +548,7 @@ function ModelBrainCard({ data, onSaved }: { data: Snapshot; onSaved: () => void
               <ModelPicker
                 key={cfg.provider}
                 provider={cfg.provider}
+                baseUrl={cfg.baseUrl}
                 value={cfg.models[tier]}
                 onChange={(v) => setCfg({ ...cfg, models: { ...cfg.models, [tier]: v } })}
               />

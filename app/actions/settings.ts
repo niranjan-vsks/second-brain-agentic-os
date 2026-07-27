@@ -27,6 +27,8 @@ import {
 import { validateKey, type KeyValidation, type ValidationContext } from "@/lib/key-validation"
 import { describeLlm, describeLlmForUser } from "@/lib/llm"
 import { TASK_TIERS } from "@/lib/model-router"
+import { listAvailableModels, type CatalogProvider, type ModelListResult } from "@/lib/model-discovery"
+import { getSecret } from "@/lib/config"
 
 async function getUserId(): Promise<string> {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -149,6 +151,16 @@ export async function getSettingsSnapshot() {
 async function validationCtx(userId: string): Promise<ValidationContext> {
   const c = await getConfig(userId, "connections", CONNECTIONS_DEFAULTS)
   return { n8nBaseUrl: c.n8nBaseUrl, crawl4aiBaseUrl: c.crawl4aiBaseUrl, browserWorkerUrl: c.browserWorkerUrl }
+}
+
+/**
+ * List models actually available on the operator's own connection for a
+ * provider (vault key or env fallback) — real live discovery, not a static
+ * guess list. Used by the Model Brain / Routing Strategies pickers.
+ */
+export async function listAvailableModelsAction(provider: CatalogProvider, baseUrl?: string): Promise<ModelListResult> {
+  const userId = await getUserId()
+  return listAvailableModels(provider, (keyProvider) => getSecret(userId, keyProvider, "settings.listModels"), baseUrl)
 }
 
 /**
