@@ -338,7 +338,7 @@ function RoutingStrategiesCard({ data, onSaved }: { data: Snapshot; onSaved: () 
   }
   async function applyPlan() {
     setBusy("plan")
-    const t = toast.loading("Seeding Gemini's benchmark strategies…")
+    const t = toast.loading("Loading recommended routing…")
     try {
       const r = await applyRecommendedRoutingAction()
       // Reflect the seeded strategies immediately in the editor + refresh SWR.
@@ -346,12 +346,12 @@ function RoutingStrategiesCard({ data, onSaved }: { data: Snapshot; onSaved: () 
       setDefaultStrategy(r.defaultStrategy)
       onSaved()
       const activeName = r.strategies.find((s) => s.id === r.defaultStrategy)?.name ?? r.defaultId
-      toast.success(`Seeded ${r.count} strategies`, {
+      toast.success(`Loaded ${r.count} routing strategies`, {
         id: t,
         description: `Default set to “${activeName}”. They're editable below now.`,
       })
     } catch (e) {
-      toast.error("Couldn't seed the plan", { id: t, description: e instanceof Error ? e.message : undefined })
+      toast.error("Couldn't load the routing preset", { id: t, description: e instanceof Error ? e.message : undefined })
     }
     setBusy("")
   }
@@ -369,7 +369,7 @@ function RoutingStrategiesCard({ data, onSaved }: { data: Snapshot; onSaved: () 
           </div>
           <Button variant="secondary" size="sm" onClick={applyPlan} disabled={busy !== ""}>
             {busy === "plan" ? <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden="true" /> : null}
-            Seed Gemini&apos;s plan
+            Load recommended routing
           </Button>
         </div>
       </CardHeader>

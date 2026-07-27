@@ -291,35 +291,37 @@ export const LLM_BRAIN_DEFAULTS: LlmBrainConfig = {
 export function recommendedStrategies(): { strategies: RoutingStrategy[]; defaultId: string } {
   const strategies: RoutingStrategy[] = [
     {
-      id: "max-quality",
-      name: "Max Quality",
+      id: "kimi-brain",
+      name: "Kimi Brain (recommended)",
       tiers: {
-        light: { provider: "google", model: "gemini-3.5-flash" },
-        standard: { provider: "moonshot", model: "" },
-        heavy: { provider: "moonshot", model: "" }, // Kimi K3 for deep reasoning
+        // Kimi K3 is the smart brain (heavy = Jarvis, deep reasoning); Gemini 3.5
+        // flash handles the cheaper high-volume tiers. Kimi routed via OpenRouter
+        // (verified reliable). Resilient fallback covers any provider outage.
+        light: { provider: "google", model: "gemini-3.5-flash-lite" },
+        standard: { provider: "google", model: "gemini-3.5-flash" },
+        heavy: { provider: "openrouter", model: "moonshotai/kimi-k3" },
       },
     },
     {
-      id: "balanced-gemini",
-      name: "Balanced (Gemini plan)",
+      id: "max-quality",
+      name: "Max Quality (all Kimi)",
       tiers: {
-        light: { provider: "google", model: "gemini-3.5-flash-lite" },
-        standard: { provider: "google", model: "gemini-3.5-flash" },
-        // Gemini-only + free-tier safe (pro tier has limit 0 on new keys).
-        heavy: { provider: "google", model: "gemini-3.5-flash" },
+        light: { provider: "google", model: "gemini-3.5-flash" },
+        standard: { provider: "openrouter", model: "moonshotai/kimi-k3" },
+        heavy: { provider: "openrouter", model: "moonshotai/kimi-k3" },
       },
     },
     {
       id: "cost-saver",
-      name: "Cost Saver",
+      name: "Cost Saver (all Gemini)",
       tiers: {
         light: { provider: "google", model: "gemini-3.5-flash-lite" },
-        standard: { provider: "openrouter", model: "deepseek/deepseek-chat" },
+        standard: { provider: "google", model: "gemini-3.5-flash" },
         heavy: { provider: "google", model: "gemini-3.5-flash" },
       },
     },
   ]
-  return { strategies, defaultId: "balanced-gemini" }
+  return { strategies, defaultId: "kimi-brain" }
 }
 
 // --- Job-Hunt engine config (Node 1 Sourcer curation criteria) ----------------

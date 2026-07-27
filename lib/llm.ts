@@ -96,14 +96,14 @@ export function getModel(tier: ModelTier = "heavy"): Parameters<typeof import("a
 
 const MOONSHOT_BASE = "https://api.moonshot.ai/v1"
 const MOONSHOT_DEFAULTS: Record<ModelTier, string> = {
-  light: "kimi-k2-0711-preview",
-  standard: "kimi-k2-0711-preview",
-  heavy: "kimi-k2-0711-preview",
+  light: "kimi-latest",
+  standard: "kimi-latest",
+  heavy: "kimi-latest",
 }
 const OPENROUTER_DEFAULTS: Record<ModelTier, string> = {
-  light: "google/gemini-2.5-flash-lite",
-  standard: "google/gemini-2.5-flash",
-  heavy: "anthropic/claude-sonnet-4.5",
+  light: "google/gemini-3.5-flash-lite",
+  standard: "google/gemini-3.5-flash",
+  heavy: "moonshotai/kimi-k3", // Kimi K3 = the smart brain
 }
 
 const GOOGLE_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
@@ -187,36 +187,27 @@ async function buildModel(
   return getModel(tier)
 }
 
+/** A resolved brain choice (provider + model strings) BEFORE it's built into a model object. */
+interface BrainChoice {
+  provider: Provider
+  model: string
+  baseUrl?: string
+}
+
 /**
- * Resolve the model for a user + tier, honoring Settings → Model Brain (global
- * provider) AND an optional per-TASK override (Gemini's routing plan). Vault-key
- * aware. Falls back to env getModel() when unconfigured.
- *
- * @param task optional TASK_TIERS task name — if the user routed that task to a
- *             specific engine, it wins over the global brain.
+ * Resolve the user's configured brain CHOICE (provider + model strings) for a
+ * tier/task, honoring Settings → Model Brain: per-task override → per-group
+ * strategy → global default strategy → legacy global brain provider/model.
+ * Returns just the choice; buildModel turns it into a usable model object.
  */
-export async function getModelForUser(userId: string, tier: ModelTier = "heavy", task?: string): Promise<BrainModel> {
+async function resolveBrainChoice(userId: string, tier: ModelTier, task?: string): Promise<BrainChoice> {
   const { getConfig, LLM_BRAIN_DEFAULTS } = await import("@/lib/config")
   const brain = await getConfig(userId, "llm_brain", LLM_BRAIN_DEFAULTS)
 
-  // Cascade (finest → coarsest):
-  //   1. per-task override (advanced)
-  //   2. per-group strategy (e.g. LinkedIn uses a different strategy than Career)
-  //   3. global default strategy
-  //   4. legacy global brain provider/models
-  //   5. env getModel()
-
-  // 1. per-task override (with graceful primary→fallback)
+  // 1. per-task override (advanced)
   const override = task ? brain.taskModels?.[task] : undefined
   if (override?.provider) {
-    try {
-      return await buildModel(userId, override.provider as Provider, override.model?.trim() ?? "", tier, brain.baseUrl)
-    } catch (e) {
-      if (override.fallbackProvider) {
-        return buildModel(userId, override.fallbackProvider as Provider, override.fallbackModel?.trim() ?? "", tier, brain.baseUrl)
-      }
-      throw e
-    }
+    return { provider: override.provider as Provider, model: override.model?.trim() ?? "", baseUrl: brain.baseUrl }
   }
 
   // 2/3. strategy — group override else global default
@@ -235,12 +226,157 @@ export async function getModelForUser(userId: string, tier: ModelTier = "heavy",
     const strat = strategies.find((s) => s.id === stratId)
     const choice = strat?.tiers?.[tier]
     if (choice?.provider) {
-      return buildModel(userId, choice.provider as Provider, choice.model?.trim() ?? "", tier, brain.baseUrl)
+      return { provider: choice.provider as Provider, model: choice.model?.trim() ?? "", baseUrl: brain.baseUrl }
     }
   }
 
-  // 4/5. legacy global brain (falls back to env getModel inside buildModel gateway path)
-  return buildModel(userId, brain.provider as Provider, brain.models?.[tier]?.trim() ?? "", tier, brain.baseUrl)
+  // 4/5. legacy global brain
+  return { provider: brain.provider as Provider, model: brain.models?.[tier]?.trim() ?? "", baseUrl: brain.baseUrl }
+}
+
+/**
+ * Resolve the model for a user + tier, honoring Settings → Model Brain (global
+ * provider) AND an optional per-TASK override. Vault-key aware. Falls back to
+ * env getModel() when unconfigured.
+ */
+export async function getModelForUser(userId: string, tier: ModelTier = "heavy", task?: string): Promise<BrainModel> {
+  const c = await resolveBrainChoice(userId, tier, task)
+  return buildModel(userId, c.provider, c.model, tier, c.baseUrl)
+}
+
+// --- Resilient multi-provider fallback -----------------------------------------
+// A transient provider error (503 Service Unavailable, 5xx, overloaded, timeout)
+// must never break an agent when a different provider's key is sitting in the
+// vault. getModelChainForUser returns the user's chosen brain FIRST, then
+// provider-diverse fallbacks; generateTextResilient tries each in order.
+
+/** Cross-provider fallback candidates per tier (provider-diverse, ordered). */
+const FALLBACK_CANDIDATES: Record<ModelTier, BrainChoice[]> = {
+  // Provider-diverse so one provider's outage/credit-exhaustion is always
+  // covered by a different one. Deduped by provider at chain-build time.
+  heavy: [
+    { provider: "openrouter", model: "moonshotai/kimi-k3" }, // smart brain
+    { provider: "google", model: "gemini-3.5-flash" },
+    { provider: "moonshot", model: "" }, // Kimi via direct Moonshot (distinct infra from OpenRouter)
+  ],
+  standard: [
+    { provider: "google", model: "gemini-3.5-flash" },
+    { provider: "openrouter", model: "moonshotai/kimi-k3" },
+    { provider: "moonshot", model: "" },
+  ],
+  light: [
+    { provider: "google", model: "gemini-3.5-flash-lite" },
+    { provider: "openrouter", model: "google/gemini-2.5-flash-lite" },
+  ],
+}
+
+/** Does this provider have a usable key (vault or env)? */
+async function providerHasKey(userId: string, provider: Provider): Promise<boolean> {
+  const { getSecret } = await import("@/lib/config")
+  if (provider === "gateway") return gatewayUsable()
+  const map: Partial<Record<Provider, { keyId: string; env: string[] }>> = {
+    google: { keyId: "google_ai", env: ["GOOGLE_AI_API_KEY", "GEMINI_API_KEY"] },
+    openrouter: { keyId: "openrouter", env: ["OPENROUTER_API_KEY"] },
+    moonshot: { keyId: "moonshot", env: ["MOONSHOT_API_KEY"] },
+    custom: { keyId: "openrouter", env: ["LLM_API_KEY", "OPENROUTER_API_KEY"] },
+  }
+  const m = map[provider]
+  if (!m) return false
+  const k = await getSecret(userId, m.keyId, "llm.chain").catch(() => null)
+  return Boolean(k || m.env.some((e) => process.env[e]))
+}
+
+/**
+ * Ordered list of built models to try: the user's configured brain choice
+ * first, then provider-diverse fallbacks whose keys exist. Deduped by provider
+ * so we don't retry the same failing service twice. Always ends with the
+ * gateway/env default as a last resort.
+ */
+export async function getModelChainForUser(userId: string, tier: ModelTier = "heavy", task?: string): Promise<BrainModel[]> {
+  const primary = await resolveBrainChoice(userId, tier, task)
+  const chain: BrainModel[] = []
+  const usedProviders = new Set<Provider>()
+
+  const add = async (c: BrainChoice) => {
+    if (usedProviders.has(c.provider)) return
+    if (!(await providerHasKey(userId, c.provider))) return
+    try {
+      chain.push(await buildModel(userId, c.provider, c.model, tier, c.baseUrl))
+      usedProviders.add(c.provider)
+    } catch {
+      // key/config missing for this provider — skip it silently
+    }
+  }
+
+  await add(primary)
+  for (const cand of FALLBACK_CANDIDATES[tier]) await add(cand)
+  // Last resort: env/gateway default (always buildable, may itself fall back to a vault key)
+  if (chain.length === 0) chain.push(await buildModel(userId, "gateway", "", tier))
+  return chain
+}
+
+/**
+ * Errors where retrying on a DIFFERENT provider is likely to succeed:
+ * transient outages (5xx / overloaded / timeout / rate-limit) AND
+ * account-level exhaustion on one provider (out of credits / quota / payment
+ * required) — because a different provider's key may still be funded. Auth /
+ * bad-request errors are NOT included: those fail identically everywhere.
+ */
+export function isTransientLLMError(e: unknown): boolean {
+  const msg = (e instanceof Error ? e.message : String(e)).toLowerCase()
+  return (
+    /\b(500|502|503|504|429|402)\b/.test(msg) ||
+    msg.includes("service unavailable") ||
+    msg.includes("overloaded") ||
+    msg.includes("unavailable") ||
+    msg.includes("timeout") ||
+    msg.includes("timed out") ||
+    msg.includes("econnreset") ||
+    msg.includes("rate limit") ||
+    msg.includes("too many requests") ||
+    msg.includes("temporarily") ||
+    // account exhaustion on one provider — a funded fallback provider still works
+    msg.includes("requires more credits") ||
+    msg.includes("can only afford") ||
+    msg.includes("insufficient") ||
+    msg.includes("quota") ||
+    msg.includes("payment required") ||
+    msg.includes("credit card")
+  )
+}
+
+type GenerateTextParams = Parameters<typeof import("ai").generateText>[0]
+
+/**
+ * generateText with automatic cross-provider fallback. Tries the user's brain
+ * choice, then provider-diverse fallbacks, hopping only on TRANSIENT errors
+ * (5xx / overloaded / rate-limit / timeout). Non-transient errors (auth, bad
+ * request) surface immediately — retrying a different provider won't help.
+ */
+export async function generateTextResilient(
+  userId: string,
+  tier: ModelTier,
+  task: string | undefined,
+  params: Omit<GenerateTextParams, "model">,
+): Promise<{ text: string; steps?: unknown }> {
+  const { generateText } = await import("ai")
+  const chain = await getModelChainForUser(userId, tier, task)
+  let lastErr: unknown
+  for (let i = 0; i < chain.length; i++) {
+    try {
+      // maxRetries (with the AI SDK's exponential backoff) rides out an
+      // INTERMITTENTLY-flaky provider (e.g. Gemini's "high demand" 503s that
+      // clear within a second) before we bother hopping to the next provider.
+      const r = await generateText({ ...(params as GenerateTextParams), model: chain[i], maxRetries: 4 })
+      return { text: r.text, steps: r.steps }
+    } catch (e) {
+      lastErr = e
+      const transient = isTransientLLMError(e)
+      console.error(`[llm] ${task ?? tier} attempt ${i + 1}/${chain.length} failed (${transient ? "transient" : "hard"}):`, e instanceof Error ? e.message : e)
+      if (!transient) throw e // auth/bad-request — don't burn the whole chain
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr))
 }
 
 /** Human-readable description of the active brain per tier, for settings UI / diagnostics. */

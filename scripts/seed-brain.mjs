@@ -4,7 +4,7 @@
 //   node scripts/seed-brain.mjs [email]
 //
 // Sets app_config("llm_brain") = provider google + the 3 recommended routing
-// strategies, default = balanced-gemini (Gemini-only, one Google key powers all
+// strategies, default = kimi-brain (Kimi K3 heavy brain + Gemini 3.5 light/std,
 // tiers). Idempotent: re-running overwrites the llm_brain row for that user.
 
 import { readFileSync } from "node:fs"
@@ -32,40 +32,40 @@ if (!DATABASE_URL) {
 
 const strategies = [
   {
-    id: "max-quality",
-    name: "Max Quality",
+    id: "kimi-brain",
+    name: "Kimi Brain (recommended)",
     tiers: {
-      light: { provider: "google", model: "gemini-3.5-flash" },
-      standard: { provider: "moonshot", model: "" },
-      heavy: { provider: "moonshot", model: "" },
+      light: { provider: "google", model: "gemini-3.5-flash-lite" },
+      standard: { provider: "google", model: "gemini-3.5-flash" },
+      heavy: { provider: "openrouter", model: "moonshotai/kimi-k3" },
     },
   },
   {
-    id: "balanced-gemini",
-    name: "Balanced (Gemini plan)",
+    id: "max-quality",
+    name: "Max Quality (all Kimi)",
+    tiers: {
+      light: { provider: "google", model: "gemini-3.5-flash" },
+      standard: { provider: "openrouter", model: "moonshotai/kimi-k3" },
+      heavy: { provider: "openrouter", model: "moonshotai/kimi-k3" },
+    },
+  },
+  {
+    id: "cost-saver",
+    name: "Cost Saver (all Gemini)",
     tiers: {
       light: { provider: "google", model: "gemini-3.5-flash-lite" },
       standard: { provider: "google", model: "gemini-3.5-flash" },
       heavy: { provider: "google", model: "gemini-3.5-flash" },
     },
   },
-  {
-    id: "cost-saver",
-    name: "Cost Saver",
-    tiers: {
-      light: { provider: "google", model: "gemini-3.5-flash-lite" },
-      standard: { provider: "openrouter", model: "deepseek/deepseek-chat" },
-      heavy: { provider: "google", model: "gemini-3.5-flash" },
-    },
-  },
 ]
 
 const brain = {
-  provider: "google", // fallback engine = Gemini, works off GEMINI_API_KEY / vault google_ai
+  provider: "openrouter", // legacy fallback engine; strategy above drives per-tier routing
   baseUrl: "",
   models: { light: "", standard: "", heavy: "" },
   strategies,
-  defaultStrategy: "balanced-gemini",
+  defaultStrategy: "kimi-brain",
   groupStrategies: {},
   taskModels: {},
 }
@@ -86,7 +86,7 @@ try {
       userId,
       "llm_brain",
     ])
-    console.log(`Updated llm_brain for ${email} (${userId}) -> provider=google, default=balanced-gemini`)
+    console.log(`Updated llm_brain for ${email} (${userId}) -> provider=openrouter, default=kimi-brain`)
   } else {
     await pool.query('INSERT INTO app_config (id, "userId", key, value) VALUES ($1, $2, $3, $4)', [
       randomUUID(),
@@ -94,7 +94,7 @@ try {
       "llm_brain",
       JSON.stringify(brain),
     ])
-    console.log(`Inserted llm_brain for ${email} (${userId}) -> provider=google, default=balanced-gemini`)
+    console.log(`Inserted llm_brain for ${email} (${userId}) -> provider=openrouter, default=kimi-brain`)
   }
 } finally {
   await pool.end()

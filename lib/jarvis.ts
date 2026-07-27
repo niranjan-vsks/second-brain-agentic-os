@@ -4,7 +4,7 @@ import { z } from "zod"
 import { db, pool } from "@/lib/db"
 import { autopays, paymentInstruments } from "@/lib/db/schema"
 import { eq, and } from "drizzle-orm"
-import { getModelForUser } from "@/lib/llm"
+import { getModelForUser, generateTextResilient } from "@/lib/llm"
 import { SCHEMA_DESCRIPTION, validateSql } from "@/lib/os-chat"
 import { getCalendarConnection, listEvents, createEvent, deleteEvent } from "@/lib/google-calendar"
 import { orchestratorTools, getActiveLessons } from "@/lib/jarvis-orchestrator"
@@ -210,8 +210,11 @@ export async function jarvisChat(
       : ""
 
   try {
-    const { text } = await generateText({
-      model: await getModelForUser(userId, "heavy", "os_chat.jarvis"), // jarvis.chat — orchestrator loop: multi-tool planning over the whole OS
+    // Resilient: Kimi K3 (heavy brain) first, auto-fallback to another provider
+    // on a TRANSIENT error (503 Service Unavailable / overloaded / rate-limit)
+    // so a single provider outage never breaks Jarvis. jarvis.chat — orchestrator
+    // loop: multi-tool planning over the whole OS.
+    const { text } = await generateTextResilient(userId, "heavy", "os_chat.jarvis", {
       system: JARVIS_SYSTEM.replace(
         "{{TODAY}}",
         new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "full" }),
