@@ -5,6 +5,7 @@ import { db } from "@/lib/db"
 import { osChatMessages } from "@/lib/db/schema"
 import { desc, eq } from "drizzle-orm"
 import { headers } from "next/headers"
+import { after } from "next/server"
 import { answerOsQuestion } from "@/lib/os-chat"
 
 async function getUserId() {
@@ -53,10 +54,24 @@ export async function askJarvis(question: string) {
     { role: "user" as const, content: q },
   ]
 
-  await db.insert(osChatMessages).values({ id: randomUUID(), userId, channel: "web", role: "user", content: q })
+  // Persist the user turn in the background — `messages` above already has the
+  // question in it, so jarvisChat doesn't need this write to complete first.
+  // Awaiting it serially was adding a full DB round trip to every reply.
+  db.insert(osChatMessages)
+    .values({ id: randomUUID(), userId, channel: "web", role: "user", content: q })
+    .catch((e) => console.error("[jarvis] failed to persist user turn:", e))
+
   const result = await jarvisChat(userId, messages)
-  await db
-    .insert(osChatMessages)
-    .values({ id: randomUUID(), userId, channel: "web", role: "assistant", content: result.text })
+
+  // Return the answer immediately; persist after the response is sent. Plain
+  // fire-and-forget risks the serverless function freezing before the write
+  // lands — after() keeps it alive for exactly this kind of trailing work.
+  after(() =>
+    db
+      .insert(osChatMessages)
+      .values({ id: randomUUID(), userId, channel: "web", role: "assistant", content: result.text })
+      .catch((e) => console.error("[jarvis] failed to persist assistant turn:", e)),
+  )
+
   return result.text
 }
