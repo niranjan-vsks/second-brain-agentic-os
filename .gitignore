@@ -32,3 +32,4 @@ AGENTS.md
 .github/copilot-instructions.md
 new_agents/
 content_dump/
+.playwright-mcp/
