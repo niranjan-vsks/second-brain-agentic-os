@@ -110,7 +110,9 @@ const GOOGLE_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
 const GOOGLE_DEFAULTS: Record<ModelTier, string> = {
   light: "gemini-2.5-flash-lite",
   standard: "gemini-2.5-flash",
-  heavy: "gemini-2.5-pro",
+  // 2.5-pro has a free-tier quota of 0 — default heavy to flash so a free
+  // Google AI Studio key works. Billed keys can override to gemini-2.5-pro.
+  heavy: "gemini-2.5-flash",
 }
 
 type BrainModel = Parameters<typeof import("ai").generateText>[0]["model"]

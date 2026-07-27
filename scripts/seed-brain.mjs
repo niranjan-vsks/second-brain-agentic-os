@@ -46,7 +46,7 @@ const strategies = [
     tiers: {
       light: { provider: "google", model: "gemini-2.5-flash-lite" },
       standard: { provider: "google", model: "gemini-2.5-flash" },
-      heavy: { provider: "google", model: "gemini-2.5-pro" },
+      heavy: { provider: "google", model: "gemini-2.5-flash" },
     },
   },
   {

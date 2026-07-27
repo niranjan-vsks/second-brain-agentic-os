@@ -305,8 +305,8 @@ export function recommendedStrategies(): { strategies: RoutingStrategy[]; defaul
       tiers: {
         light: { provider: "google", model: "gemini-2.5-flash-lite" },
         standard: { provider: "google", model: "gemini-2.5-flash" },
-        // Gemini-only so the default works off a single Google AI Studio key.
-        heavy: { provider: "google", model: "gemini-2.5-pro" },
+        // Gemini-only + free-tier safe (2.5-pro has limit 0 on the free tier).
+        heavy: { provider: "google", model: "gemini-2.5-flash" },
       },
     },
     {
