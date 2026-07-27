@@ -35,7 +35,7 @@ const strategies = [
     id: "max-quality",
     name: "Max Quality",
     tiers: {
-      light: { provider: "google", model: "gemini-2.5-flash" },
+      light: { provider: "google", model: "gemini-3.5-flash" },
       standard: { provider: "moonshot", model: "" },
       heavy: { provider: "moonshot", model: "" },
     },
@@ -44,18 +44,18 @@ const strategies = [
     id: "balanced-gemini",
     name: "Balanced (Gemini plan)",
     tiers: {
-      light: { provider: "google", model: "gemini-2.5-flash-lite" },
-      standard: { provider: "google", model: "gemini-2.5-flash" },
-      heavy: { provider: "google", model: "gemini-2.5-flash" },
+      light: { provider: "google", model: "gemini-3.5-flash-lite" },
+      standard: { provider: "google", model: "gemini-3.5-flash" },
+      heavy: { provider: "google", model: "gemini-3.5-flash" },
     },
   },
   {
     id: "cost-saver",
     name: "Cost Saver",
     tiers: {
-      light: { provider: "google", model: "gemini-2.5-flash-lite" },
+      light: { provider: "google", model: "gemini-3.5-flash-lite" },
       standard: { provider: "openrouter", model: "deepseek/deepseek-chat" },
-      heavy: { provider: "google", model: "gemini-2.5-flash" },
+      heavy: { provider: "google", model: "gemini-3.5-flash" },
     },
   },
 ]

@@ -108,11 +108,13 @@ const OPENROUTER_DEFAULTS: Record<ModelTier, string> = {
 
 const GOOGLE_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
 const GOOGLE_DEFAULTS: Record<ModelTier, string> = {
-  light: "gemini-2.5-flash-lite",
-  standard: "gemini-2.5-flash",
-  // 2.5-pro has a free-tier quota of 0 — default heavy to flash so a free
-  // Google AI Studio key works. Billed keys can override to gemini-2.5-pro.
-  heavy: "gemini-2.5-flash",
+  // gemini-2.5-* is being retired for new API keys ("no longer available to
+  // new users" 404) — Gemini 3.5 is the current stable (non-preview) gen.
+  light: "gemini-3.5-flash-lite",
+  standard: "gemini-3.5-flash",
+  // 3-pro-tier free quota is 0 on new keys — default heavy to flash so a free
+  // Google AI Studio key works. Billed keys can override to a pro model.
+  heavy: "gemini-3.5-flash",
 }
 
 type BrainModel = Parameters<typeof import("ai").generateText>[0]["model"]

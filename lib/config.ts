@@ -294,7 +294,7 @@ export function recommendedStrategies(): { strategies: RoutingStrategy[]; defaul
       id: "max-quality",
       name: "Max Quality",
       tiers: {
-        light: { provider: "google", model: "gemini-2.5-flash" },
+        light: { provider: "google", model: "gemini-3.5-flash" },
         standard: { provider: "moonshot", model: "" },
         heavy: { provider: "moonshot", model: "" }, // Kimi K3 for deep reasoning
       },
@@ -303,19 +303,19 @@ export function recommendedStrategies(): { strategies: RoutingStrategy[]; defaul
       id: "balanced-gemini",
       name: "Balanced (Gemini plan)",
       tiers: {
-        light: { provider: "google", model: "gemini-2.5-flash-lite" },
-        standard: { provider: "google", model: "gemini-2.5-flash" },
-        // Gemini-only + free-tier safe (2.5-pro has limit 0 on the free tier).
-        heavy: { provider: "google", model: "gemini-2.5-flash" },
+        light: { provider: "google", model: "gemini-3.5-flash-lite" },
+        standard: { provider: "google", model: "gemini-3.5-flash" },
+        // Gemini-only + free-tier safe (pro tier has limit 0 on new keys).
+        heavy: { provider: "google", model: "gemini-3.5-flash" },
       },
     },
     {
       id: "cost-saver",
       name: "Cost Saver",
       tiers: {
-        light: { provider: "google", model: "gemini-2.5-flash-lite" },
+        light: { provider: "google", model: "gemini-3.5-flash-lite" },
         standard: { provider: "openrouter", model: "deepseek/deepseek-chat" },
-        heavy: { provider: "google", model: "gemini-2.5-flash" },
+        heavy: { provider: "google", model: "gemini-3.5-flash" },
       },
     },
   ]
