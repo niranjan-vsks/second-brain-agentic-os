@@ -232,8 +232,13 @@ export async function jarvisChat(
       }
     }
     if (msg.includes("401") || msg.toLowerCase().includes("unauthorized") || msg.toLowerCase().includes("api key")) {
-      return { ok: false, text: "LLM provider rejected the request (auth). Check OPENROUTER_API_KEY / gateway configuration in project env vars." }
+      return { ok: false, text: `LLM provider rejected the request (auth): ${msg.slice(0, 300)}` }
     }
-    return { ok: false, text: "Jarvis hit an error. Check that an LLM provider is configured." }
+    if (msg.includes("429") || msg.toLowerCase().includes("quota") || msg.toLowerCase().includes("too many requests")) {
+      return { ok: false, text: `Rate-limited by the provider: ${msg.slice(0, 300)}` }
+    }
+    // Last resort: show the real error instead of a generic message that hides
+    // the actual failure (this masked a Gemini 429 quota error for hours once).
+    return { ok: false, text: `Jarvis hit an error: ${msg.slice(0, 400)}` }
   }
 }
