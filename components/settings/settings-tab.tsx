@@ -17,6 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { getSettingsSnapshot, saveConfigAction, saveApiKeyAction, deleteApiKeyAction, validateApiKeyAction, verifyStoredKeyAction, saveBrainAction, applyRecommendedRoutingAction, saveRoutingAction } from "@/app/actions/settings"
 import type { KeyValidation } from "@/lib/key-validation"
+import { MODEL_CATALOG, CUSTOM_MODEL_VALUE, type CatalogProvider } from "@/lib/model-catalog"
 import {
   Settings2,
   Cpu,
@@ -46,6 +47,80 @@ const SECTIONS = [
 ] as const
 
 type SectionId = (typeof SECTIONS)[number]["id"]
+
+/**
+ * Model picker: dropdown of known model ids for the given provider, plus a
+ * "Custom…" option that reveals a free-text box. Falls into custom mode
+ * automatically when the current value isn't in the catalog (e.g. loaded from
+ * a strategy that was hand-typed, or a provider whose list is empty).
+ */
+function ModelPicker({
+  provider,
+  value,
+  onChange,
+  placeholder,
+  className,
+}: {
+  provider: CatalogProvider
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+  className?: string
+}) {
+  const known = MODEL_CATALOG[provider] ?? []
+  const [customMode, setCustomMode] = useState(() => value !== "" && !known.includes(value))
+
+  if (known.length === 0 || customMode) {
+    return (
+      <div className="flex gap-1.5">
+        <Input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder || "model id (blank = default)"}
+          className={className}
+        />
+        {known.length > 0 && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Pick from list instead"
+            title="Pick from list instead"
+            onClick={() => {
+              setCustomMode(false)
+              onChange("")
+            }}
+          >
+            <XCircle className="size-3.5" aria-hidden="true" />
+          </Button>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <Select
+      value={value || "__blank"}
+      onValueChange={(v) => {
+        if (v === CUSTOM_MODEL_VALUE) {
+          setCustomMode(true)
+          onChange("")
+        } else {
+          onChange(v === "__blank" ? "" : (v ?? ""))
+        }
+      }}
+    >
+      <SelectTrigger className={className}><SelectValue placeholder={placeholder || "provider default"} /></SelectTrigger>
+      <SelectContent>
+        <SelectItem value="__blank">Provider default</SelectItem>
+        {known.map((m) => (
+          <SelectItem key={m} value={m}>{m}</SelectItem>
+        ))}
+        <SelectItem value={CUSTOM_MODEL_VALUE}>Custom…</SelectItem>
+      </SelectContent>
+    </Select>
+  )
+}
 
 function StatusDot({ ok, okLabel, badLabel }: { ok: boolean; okLabel: string; badLabel: string }) {
   return ok ? (
@@ -308,10 +383,11 @@ function RoutingStrategiesCard({ data, onSaved }: { data: Snapshot; onSaved: () 
                         ))}
                       </SelectContent>
                     </Select>
-                    <Input
+                    <ModelPicker
+                      key={s.tiers[tier].provider}
+                      provider={s.tiers[tier].provider}
                       value={s.tiers[tier].model}
-                      onChange={(e) => patch(s.id, (x) => ({ ...x, tiers: { ...x.tiers, [tier]: { ...x.tiers[tier], model: e.target.value } } }))}
-                      placeholder="model id (blank = default)"
+                      onChange={(v) => patch(s.id, (x) => ({ ...x, tiers: { ...x.tiers, [tier]: { ...x.tiers[tier], model: v } } }))}
                       className="h-7 text-[11px]"
                     />
                   </div>
@@ -446,10 +522,11 @@ function ModelBrainCard({ data, onSaved }: { data: Snapshot; onSaved: () => void
           {(["light", "standard", "heavy"] as const).map((tier) => (
             <div key={tier} className="flex flex-col gap-1.5">
               <Label className="text-xs capitalize">{tier} model</Label>
-              <Input
-                placeholder={cfg.provider === "moonshot" ? "kimi-k2-0711-preview" : "provider default"}
+              <ModelPicker
+                key={cfg.provider}
+                provider={cfg.provider}
                 value={cfg.models[tier]}
-                onChange={(e) => setCfg({ ...cfg, models: { ...cfg.models, [tier]: e.target.value } })}
+                onChange={(v) => setCfg({ ...cfg, models: { ...cfg.models, [tier]: v } })}
               />
             </div>
           ))}
