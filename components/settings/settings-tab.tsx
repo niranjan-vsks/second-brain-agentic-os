@@ -121,8 +121,19 @@ function ModelPicker({
     )
   }
 
+  // Passing `items` lets <Select.Value> resolve the trigger label immediately
+  // (from the item registry) instead of showing the raw sentinel value —
+  // without it, Base UI only knows labels once the popup has mounted once,
+  // so a fresh page load shows "__blank" verbatim.
+  const items = [
+    { value: "__blank", label: "Provider default" },
+    ...known.map((m) => ({ value: m, label: m })),
+    { value: CUSTOM_MODEL_VALUE, label: "Custom…" },
+  ]
+
   return (
     <Select
+      items={items}
       value={value || "__blank"}
       onValueChange={(v) => {
         if (v === CUSTOM_MODEL_VALUE) {
@@ -396,6 +407,7 @@ function RoutingStrategiesCard({ data, onSaved }: { data: Snapshot; onSaved: () 
                       {tier === "light" ? "basic" : tier === "heavy" ? "complex" : "standard"}
                     </span>
                     <Select
+                      items={ENGINE_PROVIDERS.map((p) => ({ value: p.id, label: p.label }))}
                       value={s.tiers[tier].provider}
                       onValueChange={(v) => patch(s.id, (x) => ({ ...x, tiers: { ...x.tiers, [tier]: { ...x.tiers[tier], provider: (v as Strategy["tiers"]["light"]["provider"]) ?? "gateway" } } }))}
                     >
@@ -426,7 +438,11 @@ function RoutingStrategiesCard({ data, onSaved }: { data: Snapshot; onSaved: () 
         {/* Global default */}
         <div className="flex flex-col gap-1.5 rounded-lg border border-primary/25 bg-primary/5 p-3">
           <Label className="text-xs">Global default strategy</Label>
-          <Select value={defaultStrategy || "__none"} onValueChange={(v) => setDefaultStrategy(v === "__none" ? "" : (v ?? ""))}>
+          <Select
+            items={[{ value: "__none", label: "Use the global brain (above)" }, ...strategies.map((s) => ({ value: s.id, label: s.name }))]}
+            value={defaultStrategy || "__none"}
+            onValueChange={(v) => setDefaultStrategy(v === "__none" ? "" : (v ?? ""))}
+          >
             <SelectTrigger><SelectValue placeholder="Use the global brain" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="__none">Use the global brain (above)</SelectItem>
@@ -446,6 +462,7 @@ function RoutingStrategiesCard({ data, onSaved }: { data: Snapshot; onSaved: () 
               <div key={g.id} className="flex items-center justify-between gap-2 rounded-lg border border-border px-2.5 py-1.5">
                 <span className="text-xs">{g.label}</span>
                 <Select
+                  items={[{ value: "__default", label: "Use default" }, ...strategies.map((s) => ({ value: s.id, label: s.name }))]}
                   value={groupStrategies[g.id] || "__default"}
                   onValueChange={(v) => setGroupStrategies((prev) => {
                     const next = { ...prev }
@@ -525,7 +542,11 @@ function ModelBrainCard({ data, onSaved }: { data: Snapshot; onSaved: () => void
       <CardContent className="flex flex-col gap-3">
         <div className="flex flex-col gap-1.5">
           <Label className="text-xs">Provider</Label>
-          <Select value={cfg.provider} onValueChange={(v) => setCfg({ ...cfg, provider: (v as typeof cfg.provider) ?? "gateway" })}>
+          <Select
+            items={providers.map((p) => ({ value: p.id, label: p.label }))}
+            value={cfg.provider}
+            onValueChange={(v) => setCfg({ ...cfg, provider: (v as typeof cfg.provider) ?? "gateway" })}
+          >
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               {providers.map((p) => (

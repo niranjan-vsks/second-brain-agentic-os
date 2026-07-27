@@ -1,0 +1,54 @@
+- generic [active] [ref=f4e1]:
+  - main [ref=f4e2]:
+    - generic [ref=f4e4]:
+      - button "operator_os" [ref=f4e5]
+      - navigation "Primary" [ref=f4e10]:
+        - button "Career Ops" [ref=f4e11]
+        - button "Business Ops" [ref=f4e12]
+        - button "Life Ops" [ref=f4e13]
+        - button "Jarvis" [ref=f4e14]
+        - button "Connection Hub" [ref=f4e15]
+        - button "Agent Playground" [ref=f4e16]
+      - generic [ref=f4e17]:
+        - button "Notifications" [ref=f4e18]
+        - button "Settings" [ref=f4e20]
+        - generic [ref=f4e21]: QA Auditor
+        - button "Sign out" [ref=f4e22]
+    - generic [ref=f4e30]:
+      - generic [ref=f4e31]: Assistant
+      - heading "Jarvis" [level=1] [ref=f4e32]
+      - paragraph [ref=f4e33]: "Tool-calling assistant with voice: your data, calendar, and autopays."
+    - generic [ref=f4e35]:
+      - generic [ref=f4e36]:
+        - iframe [ref=f4e39]:
+          
+        - generic [ref=f4e40]: Jarvis online
+      - generic [ref=f4e44]:
+        - generic [ref=f4e45]:
+          - generic [ref=f4e46]: Jarvis — data, calendar, autopays, skills, automations, and browsing via tools.
+          - generic [ref=f4e51]:
+            - generic [ref=f4e52]:
+              - generic [ref=f4e53]: Voice
+              - switch "Voice" [ref=f4e54]
+              - checkbox [ref=f4e55]
+            - generic [ref=f4e56]:
+              - generic [ref=f4e57]: Jarvis
+              - switch "Jarvis" [checked] [ref=f4e58]
+              - checkbox [checked] [ref=f4e59]
+        - paragraph [ref=f4e61]: "Try: \"What's on my calendar this week?\" or \"Add a call with Rohan tomorrow 3pm\" or \"Which autopays charge this month?\""
+        - generic [ref=f4e62]:
+          - textbox "Ask your OS a question" [ref=f4e63]:
+            - /placeholder: Ask Jarvis — data, calendar, autopays…
+          - button "Hands-free conversation" [ref=f4e64]
+          - button "Speak once" [ref=f4e65]
+          - button "Send" [disabled]
+        - paragraph [ref=f4e66]: Mic = speak once · Radio = hands-free. Toggle Voice for spoken replies. Best in Chrome. Also via Telegram.
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=f4e72] [cursor=pointer]:
+    - generic [ref=f4e75]:
+      - text: Rendering
+      - generic [ref=f4e76]:
+        - generic [ref=f4e77]: .
+        - generic [ref=f4e78]: .
+        - generic [ref=f4e79]: .
+  - alert [ref=f4e80]

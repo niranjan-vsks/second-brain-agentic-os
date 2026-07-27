@@ -1,0 +1,175 @@
+- generic [ref=f1e1]:
+  - main [ref=f1e2]:
+    - generic [ref=f1e4]:
+      - button "operator_os" [ref=f1e5]
+      - navigation "Primary" [ref=f1e10]:
+        - button "Career Ops" [ref=f1e11]
+        - button "Business Ops" [ref=f1e12]
+        - button "Life Ops" [ref=f1e13]
+        - button "Jarvis" [ref=f1e14]
+        - button "Connection Hub" [ref=f1e15]
+        - button "Agent Playground" [ref=f1e16]
+      - generic [ref=f1e17]:
+        - button "Notifications" [ref=f1e18]
+        - button "Settings" [ref=f1e20]
+        - generic [ref=f1e21]: QA Auditor
+        - button "Sign out" [ref=f1e22]
+    - generic [ref=f1e30]:
+      - generic [ref=f1e31]: System
+      - heading "Settings Hub" [level=1] [ref=f1e32]
+      - paragraph [ref=f1e33]: "Central configuration: models, connections, API keys, agents, and funnels."
+    - generic [ref=f1e35]:
+      - navigation "Settings sections" [ref=f1e47]:
+        - button "General" [ref=f1e48]
+        - button "Model Routing" [active] [ref=f1e52]
+        - button "Connections" [ref=f1e56]
+        - button "API Keys" [ref=f1e61]
+        - button "Agents" [ref=f1e65]
+        - button "Funnels" [ref=f1e69]
+      - generic [ref=f1e100]:
+        - generic [ref=f1e101]:
+          - generic [ref=f1e103]:
+            - generic [ref=f1e104]:
+              - generic [ref=f1e105]: Model Brain
+              - generic [ref=f1e106]: "Which provider + models power every agent. Now: Vercel AI Gateway — ready"
+            - generic [ref=f1e107]: Ready
+          - generic [ref=f1e108]:
+            - generic [ref=f1e109]:
+              - generic [ref=f1e110]: Provider
+              - combobox [ref=f1e111]:
+                - generic [ref=f1e112]: gateway
+                - img: ▼
+              - textbox [ref=f1e113]: gateway
+              - paragraph [ref=f1e114]: Uses AI_GATEWAY_API_KEY (server env).
+            - generic [ref=f1e115]:
+              - generic [ref=f1e116]:
+                - generic [ref=f1e117]: light model
+                - combobox [ref=f1e118]:
+                  - generic [ref=f1e119]: __blank
+                  - img: ▼
+                - textbox [ref=f1e120]: __blank
+              - generic [ref=f1e121]:
+                - generic [ref=f1e122]: standard model
+                - combobox [ref=f1e123]:
+                  - generic [ref=f1e124]: __blank
+                  - img: ▼
+                - textbox [ref=f1e125]: __blank
+              - generic [ref=f1e126]:
+                - generic [ref=f1e127]: heavy model
+                - combobox [ref=f1e128]:
+                  - generic [ref=f1e129]: __blank
+                  - img: ▼
+                - textbox [ref=f1e130]: __blank
+            - paragraph [ref=f1e131]: Leave a model blank to use the provider default. Same model on all three tiers is fine.
+            - paragraph [ref=f1e132]: This is the global fallback engine. For different models per complexity tier and per functional area, use Routing Strategies below.
+            - button "Set as brain" [ref=f1e134]
+        - generic [ref=f1e135]:
+          - generic [ref=f1e137]:
+            - generic [ref=f1e138]:
+              - generic [ref=f1e139]: Routing Strategies
+              - generic [ref=f1e140]: Define reusable strategies (basic / standard / complex → engines), pick a global default, and assign a different strategy per functional area.
+            - button "Seed Gemini's plan" [ref=f1e141]
+          - generic [ref=f1e142]:
+            - generic [ref=f1e143]:
+              - paragraph [ref=f1e144]: No strategies yet — add one, or seed Gemini's plan.
+              - button "Add strategy" [ref=f1e145]
+            - generic [ref=f1e146]:
+              - generic [ref=f1e147]: Global default strategy
+              - combobox [ref=f1e148]:
+                - generic [ref=f1e149]: __none
+                - img: ▼
+              - textbox [ref=f1e150]: __none
+              - paragraph [ref=f1e151]: Applied to every agent unless a functional area overrides it below.
+            - generic [ref=f1e152]:
+              - generic [ref=f1e153]: Per-area overrides
+              - generic [ref=f1e154]:
+                - generic [ref=f1e155]:
+                  - generic [ref=f1e156]: Jarvis / Core
+                  - combobox [ref=f1e157]:
+                    - generic [ref=f1e158]: __default
+                    - img: ▼
+                  - textbox [ref=f1e159]: __default
+                - generic [ref=f1e160]:
+                  - generic [ref=f1e161]: Career Ops
+                  - combobox [ref=f1e162]:
+                    - generic [ref=f1e163]: __default
+                    - img: ▼
+                  - textbox [ref=f1e164]: __default
+                - generic [ref=f1e165]:
+                  - generic [ref=f1e166]: Job-Hunt Engine
+                  - combobox [ref=f1e167]:
+                    - generic [ref=f1e168]: __default
+                    - img: ▼
+                  - textbox [ref=f1e169]: __default
+                - generic [ref=f1e170]:
+                  - generic [ref=f1e171]: LinkedIn OS
+                  - combobox [ref=f1e172]:
+                    - generic [ref=f1e173]: __default
+                    - img: ▼
+                  - textbox [ref=f1e174]: __default
+                - generic [ref=f1e175]:
+                  - generic [ref=f1e176]: Freelance Funnel
+                  - combobox [ref=f1e177]:
+                    - generic [ref=f1e178]: __default
+                    - img: ▼
+                  - textbox [ref=f1e179]: __default
+                - generic [ref=f1e180]:
+                  - generic [ref=f1e181]: Lead-Gen
+                  - combobox [ref=f1e182]:
+                    - generic [ref=f1e183]: __default
+                    - img: ▼
+                  - textbox [ref=f1e184]: __default
+                - generic [ref=f1e185]:
+                  - generic [ref=f1e186]: YouTube
+                  - combobox [ref=f1e187]:
+                    - generic [ref=f1e188]: __default
+                    - img: ▼
+                  - textbox [ref=f1e189]: __default
+                - generic [ref=f1e190]:
+                  - generic [ref=f1e191]: Arsenal
+                  - combobox [ref=f1e192]:
+                    - generic [ref=f1e193]: __default
+                    - img: ▼
+                  - textbox [ref=f1e194]: __default
+            - button "Save routing" [ref=f1e196]
+        - generic [ref=f1e197]:
+          - generic [ref=f1e199]:
+            - generic [ref=f1e200]:
+              - generic [ref=f1e201]: Model Routing
+              - generic [ref=f1e202]: "Active provider: openrouter · 23 routed tasks"
+            - generic [ref=f1e203]: Needs setup
+          - generic [ref=f1e204]:
+            - generic [ref=f1e205]:
+              - generic [ref=f1e206]:
+                - generic [ref=f1e207]:
+                  - generic [ref=f1e208]: light
+                  - generic [ref=f1e209]: (unset)
+                - generic [ref=f1e210]: 6 tasks
+              - paragraph [ref=f1e211]: Formatting, extraction, filtering — high volume, low stakes
+              - paragraph [ref=f1e212]: "Override: env LLM_MODEL_LIGHT"
+              - group [ref=f1e213]:
+                - generic "Routed tasks" [ref=f1e214] [cursor=pointer]
+            - generic [ref=f1e215]:
+              - generic [ref=f1e216]:
+                - generic [ref=f1e217]:
+                  - generic [ref=f1e218]: standard
+                  - generic [ref=f1e219]: (unset)
+                - generic [ref=f1e220]: 8 tasks
+              - paragraph [ref=f1e221]: Drafting, scoring, structured judgment — the workhorse
+              - paragraph [ref=f1e222]: "Override: env LLM_MODEL_STANDARD"
+              - group [ref=f1e223]:
+                - generic "Routed tasks" [ref=f1e224] [cursor=pointer]
+            - generic [ref=f1e225]:
+              - generic [ref=f1e226]:
+                - generic [ref=f1e227]:
+                  - generic [ref=f1e228]: heavy
+                  - generic [ref=f1e229]: (unset)
+                - generic [ref=f1e230]: 9 tasks
+              - paragraph [ref=f1e231]: Deep research, evaluation, synthesis — low volume, high stakes
+              - paragraph [ref=f1e232]: "Override: env LLM_MODEL_HEAVY"
+              - group [ref=f1e233]:
+                - generic "Routed tasks" [ref=f1e234] [cursor=pointer]
+            - paragraph [ref=f1e235]: "To bring your own provider (GLM, Kimi, etc.): add an OpenRouter key under API Keys, then set LLM_PROVIDER=openrouter and the per-tier model env vars. Model IDs are never hardcoded — one env change moves the whole OS."
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=f1e43] [cursor=pointer]
+  - alert [ref=f1e99]

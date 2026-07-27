@@ -1,0 +1,23 @@
+- generic [active] [ref=f1e1]:
+  - main [ref=f1e2]:
+    - generic [ref=f1e4]:
+      - button "operator_os" [ref=f1e5]
+      - navigation "Primary" [ref=f1e10]:
+        - button "Career Ops" [ref=f1e11]
+        - button "Business Ops" [ref=f1e12]
+        - button "Life Ops" [ref=f1e13]
+        - button "Jarvis" [ref=f1e14]
+        - button "Connection Hub" [ref=f1e15]
+        - button "Agent Playground" [ref=f1e16]
+      - generic [ref=f1e17]:
+        - button "Notifications" [ref=f1e18]
+        - button "Settings" [ref=f1e20]
+        - generic [ref=f1e21]: QA Auditor
+        - button "Sign out" [ref=f1e22]
+    - generic [ref=f1e30]:
+      - generic [ref=f1e31]: System
+      - heading "Settings Hub" [level=1] [ref=f1e32]
+      - paragraph [ref=f1e33]: "Central configuration: models, connections, API keys, agents, and funnels."
+    - generic [ref=f1e34]: Loading configuration...
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=f1e43] [cursor=pointer]
