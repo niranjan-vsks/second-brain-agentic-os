@@ -43,6 +43,29 @@ export async function parseResumeFileAction(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ;(globalThis as any).DOMMatrix = DOMMatrixPolyfill
       }
+      // pdfjs-dist normally spins up a worker by dynamically importing its own
+      // worker file via a path it computes at runtime — that import fails
+      // ("Setting up fake worker failed: Cannot find module .../pdf.worker.mjs")
+      // because pdfjs-dist is a TRANSITIVE dependency (pdf-parse depends on
+      // it, we don't), and pnpm's strict node_modules layout doesn't expose
+      // transitive deps for resolution outside their declaring package. It
+      // checks globalThis.pdfjsWorker.WorkerMessageHandler FIRST and skips
+      // that broken import entirely if it's already set — so we preload the
+      // worker ourselves (which works now that pdfjs-dist is declared as our
+      // own direct dependency, giving us a resolvable top-level path to it).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (!(globalThis as any).pdfjsWorker) {
+        // pnpm's strict node_modules layout doesn't expose transitive deps at
+        // the top level (blocks "phantom dependency" access) — pdfjs-dist is
+        // only a dependency of pdf-parse, so a bare import from our own code
+        // 404s regardless of specifier style. Declaring pdfjs-dist as a direct
+        // dependency (pinned to pdf-parse's version) gives us a real top-level
+        // node_modules/pdfjs-dist to resolve against.
+        // @ts-expect-error — deep subpath export has no shipped type declarations
+        const workerModule = await import("pdfjs-dist/legacy/build/pdf.worker.mjs")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(globalThis as any).pdfjsWorker = { WorkerMessageHandler: (workerModule as any).WorkerMessageHandler }
+      }
       const { PDFParse } = await import("pdf-parse")
       const parser = new PDFParse({ data: new Uint8Array(buf) })
       // pageJoiner defaults to "-- N of M --" markers between pages — noise for
