@@ -2,15 +2,16 @@
 
 import { useRef, useState } from "react"
 import useSWR, { mutate } from "swr"
+import { toast } from "sonner"
 import type { Resume } from "@/lib/types"
-import { getMasterResumes, saveMasterResume } from "@/app/actions/career"
+import { getMasterResumes, saveMasterResume, deleteMasterResume } from "@/app/actions/career"
 import { parseResumeFileAction } from "@/app/actions/resume-import"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Loader2, Plus, Upload } from "lucide-react"
+import { Loader2, Plus, Upload, Trash2 } from "lucide-react"
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -109,6 +110,24 @@ export function ResumeStudio() {
     }
   }
 
+  async function removeResume(r: Resume) {
+    if (!window.confirm(`Delete master resume "${r.label}"? This also removes any tailored versions built from it. Can't be undone.`)) return
+    setBusy(true)
+    try {
+      await deleteMasterResume(r.id)
+      if (selectedId === r.id) {
+        setSelectedId(null)
+        setEditContent(null)
+      }
+      mutate("career-resumes")
+      toast.success(`Deleted "${r.label}"`)
+    } catch (e) {
+      toast.error("Couldn't delete resume", { description: e instanceof Error ? e.message : undefined })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2 flex-wrap">
@@ -166,9 +185,21 @@ export function ResumeStudio() {
             <CardTitle className="text-sm flex items-center justify-between">
               <span>Master: {selected.label}</span>
               {editContent === null ? (
-                <Button size="sm" variant="outline" onClick={() => setEditContent(selected.baseContent)}>
-                  Edit
-                </Button>
+                <span className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setEditContent(selected.baseContent)}>
+                    Edit
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => removeResume(selected)}
+                    disabled={busy}
+                    aria-label={`Delete ${selected.label}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </span>
               ) : (
                 <span className="flex gap-2">
                   <Button size="sm" variant="ghost" onClick={() => setEditContent(null)}>

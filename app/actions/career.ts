@@ -281,6 +281,16 @@ export async function getMasterResumes() {
   return db.select().from(resumes).where(eq(resumes.userId, userId)).orderBy(desc(resumes.createdAt))
 }
 
+export async function deleteMasterResume(id: string) {
+  const userId = await getUserId()
+  // No FK/cascade in this schema (deliberate, see CLAUDE.md) — clean up
+  // dependent resume_versions ourselves before removing the master row.
+  await db.delete(resumeVersions).where(eq(resumeVersions.resumeId, id))
+  await db.delete(resumes).where(and(eq(resumes.id, id), eq(resumes.userId, userId)))
+  revalidatePath("/")
+  return { ok: true as const }
+}
+
 // --- Story bank -----------------------------------------------------------------
 
 export async function addInterviewStory(input: {
