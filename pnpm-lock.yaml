@@ -44,6 +44,9 @@ importers:
       diff:
         specifier: ^9.0.0
         version: 9.0.0
+      dommatrix:
+        specifier: ^1.0.3
+        version: 1.0.3
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@types/pg@8.20.0)(kysely@0.29.3)(pg@8.22.0)
@@ -1891,6 +1894,10 @@ packages:
 
   dingbat-to-unicode@1.0.1:
     resolution: {integrity: sha512-98l0sW87ZT58pU4i61wa2OHwxbiYSbuxsCBozaVnYX2iCnr3bLM3fIes1/ej7h1YdOKuKt/MLs706TVnALA65w==}
+
+  dommatrix@1.0.3:
+    resolution: {integrity: sha512-l32Xp/TLgWb8ReqbVJAFIvXmY7go4nTxxlWiAFyhoQw9RKEOHBZNnyGvJWqDVSPmq3Y9HlM4npqF/T6VMOXhww==}
+    deprecated: dommatrix is no longer maintained. Please use @thednp/dommatrix.
 
   dotenv@17.4.2:
     resolution: {integrity: sha512-nI4U3TottKAcAD9LLud4Cb7b2QztQMUEfHbvhTH09bqXTxnSie8WnjPALV/WMCrJZ6UV/qHJ6L03OqO3LcdYZw==}
@@ -4706,6 +4713,8 @@ snapshots:
   diff@9.0.0: {}
 
   dingbat-to-unicode@1.0.1: {}
+
+  dommatrix@1.0.3: {}
 
   dotenv@17.4.2: {}
 

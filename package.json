@@ -23,6 +23,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "diff": "^9.0.0",
+    "dommatrix": "^1.0.3",
     "drizzle-orm": "^0.45.2",
     "fflate": "^0.8.3",
     "lucide-react": "^1.16.0",

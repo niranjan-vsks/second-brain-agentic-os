@@ -35,6 +35,14 @@ export async function parseResumeFileAction(
 
   try {
     if (ext === "pdf") {
+      // pdfjs-dist (pdf-parse's engine) touches the browser DOMMatrix API even
+      // for plain text extraction (glyph transform math) — Node has no such
+      // global, so it throws "DOMMatrix is not defined" without this polyfill.
+      if (typeof globalThis.DOMMatrix === "undefined") {
+        const { default: DOMMatrixPolyfill } = await import("dommatrix")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(globalThis as any).DOMMatrix = DOMMatrixPolyfill
+      }
       const { PDFParse } = await import("pdf-parse")
       const parser = new PDFParse({ data: new Uint8Array(buf) })
       // pageJoiner defaults to "-- N of M --" markers between pages — noise for
