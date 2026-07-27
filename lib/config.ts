@@ -305,7 +305,8 @@ export function recommendedStrategies(): { strategies: RoutingStrategy[]; defaul
       tiers: {
         light: { provider: "google", model: "gemini-2.5-flash-lite" },
         standard: { provider: "google", model: "gemini-2.5-flash" },
-        heavy: { provider: "moonshot", model: "" }, // Kimi K3 where reasoning matters
+        // Gemini-only so the default works off a single Google AI Studio key.
+        heavy: { provider: "google", model: "gemini-2.5-pro" },
       },
     },
     {

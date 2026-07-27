@@ -6,6 +6,7 @@
 
 import { useState } from "react"
 import useSWR from "swr"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -99,7 +100,7 @@ export function SettingsTab() {
 
       <div className="min-w-0 flex-1">
         {section === "general" && <GeneralSection data={data} onSaved={() => mutate()} />}
-        {section === "routing" && <RoutingSection data={data} />}
+        {section === "routing" && <RoutingSection data={data} onSaved={() => mutate()} />}
         {section === "connections" && (
           <ConnectionsSection data={data} onSaved={() => mutate()} goToKeys={() => setSection("keys")} />
         )}
@@ -116,15 +117,17 @@ export function SettingsTab() {
 function GeneralSection({ data, onSaved }: { data: Snapshot; onSaved: () => void }) {
   const [form, setForm] = useState(data.general)
   const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
 
   async function save() {
     setSaving(true)
-    await saveConfigAction("general", form as unknown as Record<string, unknown>)
+    try {
+      await saveConfigAction("general", form as unknown as Record<string, unknown>)
+      toast.success("General settings saved")
+      onSaved()
+    } catch (e) {
+      toast.error("Couldn't save settings", { description: e instanceof Error ? e.message : undefined })
+    }
     setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-    onSaved()
   }
 
   return (
@@ -172,7 +175,7 @@ function GeneralSection({ data, onSaved }: { data: Snapshot; onSaved: () => void
         <div className="flex justify-end">
           <Button onClick={save} disabled={saving}>
             {saving ? <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden="true" /> : null}
-            {saved ? "Saved" : "Save general settings"}
+            Save general settings
           </Button>
         </div>
       </CardContent>
@@ -193,12 +196,11 @@ const ENGINE_PROVIDERS = [
 type BrainCfg = Snapshot["brainConfig"]
 type Strategy = BrainCfg["strategies"][number]
 
-function RoutingStrategiesCard({ data }: { data: Snapshot }) {
+function RoutingStrategiesCard({ data, onSaved }: { data: Snapshot; onSaved: () => void }) {
   const [strategies, setStrategies] = useState<Strategy[]>(data.brainConfig.strategies ?? [])
   const [defaultStrategy, setDefaultStrategy] = useState(data.brainConfig.defaultStrategy ?? "")
   const [groupStrategies, setGroupStrategies] = useState<Record<string, string>>(data.brainConfig.groupStrategies ?? {})
   const [busy, setBusy] = useState("")
-  const [msg, setMsg] = useState("")
 
   const newStrategy = (): Strategy => ({
     id: Math.random().toString(36).slice(2, 10),
@@ -213,16 +215,36 @@ function RoutingStrategiesCard({ data }: { data: Snapshot }) {
 
   async function save() {
     setBusy("save")
-    await saveRoutingAction({ strategies, defaultStrategy, groupStrategies })
+    try {
+      await saveRoutingAction({ strategies, defaultStrategy, groupStrategies })
+      const activeName = strategies.find((s) => s.id === defaultStrategy)?.name
+      toast.success("Routing saved", {
+        description: activeName ? `Default strategy: ${activeName}` : "Using the global brain as default",
+      })
+      onSaved()
+    } catch (e) {
+      toast.error("Couldn't save routing", { description: e instanceof Error ? e.message : undefined })
+    }
     setBusy("")
-    setMsg("Routing saved.")
-    setTimeout(() => setMsg(""), 2500)
   }
   async function applyPlan() {
     setBusy("plan")
-    const r = await applyRecommendedRoutingAction()
+    const t = toast.loading("Seeding Gemini's benchmark strategies…")
+    try {
+      const r = await applyRecommendedRoutingAction()
+      // Reflect the seeded strategies immediately in the editor + refresh SWR.
+      setStrategies(r.strategies)
+      setDefaultStrategy(r.defaultStrategy)
+      onSaved()
+      const activeName = r.strategies.find((s) => s.id === r.defaultStrategy)?.name ?? r.defaultId
+      toast.success(`Seeded ${r.count} strategies`, {
+        id: t,
+        description: `Default set to “${activeName}”. They're editable below now.`,
+      })
+    } catch (e) {
+      toast.error("Couldn't seed the plan", { id: t, description: e instanceof Error ? e.message : undefined })
+    }
     setBusy("")
-    setMsg(`Seeded ${r.count} strategies · default = ${r.defaultId}. Reload to edit.`)
   }
 
   return (
@@ -347,7 +369,6 @@ function RoutingStrategiesCard({ data }: { data: Snapshot }) {
         </div>
 
         <div className="flex items-center justify-end gap-2">
-          {msg && <span className="text-[11px] text-muted-foreground">{msg}</span>}
           <Button onClick={save} disabled={busy !== ""}>
             {busy === "save" ? <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden="true" /> : null}
             Save routing
@@ -358,10 +379,9 @@ function RoutingStrategiesCard({ data }: { data: Snapshot }) {
   )
 }
 
-function ModelBrainCard({ data }: { data: Snapshot }) {
+function ModelBrainCard({ data, onSaved }: { data: Snapshot; onSaved: () => void }) {
   const [cfg, setCfg] = useState(data.brainConfig)
   const [busy, setBusy] = useState(false)
-  const [saved, setSaved] = useState(false)
   const providers = [
     { id: "gateway", label: "Vercel AI Gateway (default)" },
     { id: "moonshot", label: "Kimi (Moonshot)" },
@@ -379,10 +399,14 @@ function ModelBrainCard({ data }: { data: Snapshot }) {
 
   async function save() {
     setBusy(true)
-    await saveBrainAction(cfg)
+    try {
+      await saveBrainAction(cfg)
+      toast.success("Model brain saved", { description: `Provider: ${cfg.provider}` })
+      onSaved()
+    } catch (e) {
+      toast.error("Couldn't save the brain", { description: e instanceof Error ? e.message : undefined })
+    }
     setBusy(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
   }
 
   return (
@@ -438,7 +462,7 @@ function ModelBrainCard({ data }: { data: Snapshot }) {
         <div className="flex justify-end">
           <Button onClick={save} disabled={busy}>
             {busy ? <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden="true" /> : null}
-            {saved ? "Saved" : "Set as brain"}
+            Set as brain
           </Button>
         </div>
       </CardContent>
@@ -446,7 +470,7 @@ function ModelBrainCard({ data }: { data: Snapshot }) {
   )
 }
 
-function RoutingSection({ data }: { data: Snapshot }) {
+function RoutingSection({ data, onSaved }: { data: Snapshot; onSaved: () => void }) {
   const r = data.routing
   const tierMeta: Record<string, { desc: string; envVar: string }> = {
     light: { desc: "Formatting, extraction, filtering — high volume, low stakes", envVar: "LLM_MODEL_LIGHT" },
@@ -455,8 +479,8 @@ function RoutingSection({ data }: { data: Snapshot }) {
   }
   return (
     <div className="flex flex-col gap-4">
-      <ModelBrainCard data={data} />
-      <RoutingStrategiesCard data={data} />
+      <ModelBrainCard data={data} onSaved={onSaved} />
+      <RoutingStrategiesCard data={data} onSaved={onSaved} />
       <Card className="surface-raised border-0">
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -525,15 +549,17 @@ function ConnectionsSection({
   const c = data.connections
   const [form, setForm] = useState(data.connectionsForm)
   const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
 
   async function save() {
     setSaving(true)
-    await saveConfigAction("connections", form as unknown as Record<string, unknown>)
+    try {
+      await saveConfigAction("connections", form as unknown as Record<string, unknown>)
+      toast.success("Connection settings saved")
+      onSaved()
+    } catch (e) {
+      toast.error("Couldn't save connections", { description: e instanceof Error ? e.message : undefined })
+    }
     setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-    onSaved()
   }
 
   return (
@@ -751,7 +777,7 @@ function ConnectionsSection({
           <div className="flex justify-end">
             <Button onClick={save} disabled={saving}>
               {saving ? <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden="true" /> : null}
-              {saved ? "Saved" : "Save connection settings"}
+              Save connection settings
             </Button>
           </div>
         </CardContent>
@@ -816,15 +842,27 @@ function KeysSection({ data, onSaved }: { data: Snapshot; onSaved: () => void })
 
   const stored = new Map(data.keys.map((k) => [k.provider, k]))
 
+  const providerLabel = (id: string) => data.providers.find((p) => p.id === id)?.label ?? id
+  function toastFor(v: KeyValidation, name: string) {
+    if (v.status === "valid") toast.success(`${name} connected`, { description: v.message })
+    else if (v.status === "invalid") toast.error(`${name} rejected the key`, { description: v.detail ?? v.message })
+    else if (v.status === "error") toast.warning(`Couldn't reach ${name}`, { description: v.message })
+    else toast.info(`${name}: not verifiable`, { description: v.message })
+  }
+
   async function test() {
     if (!provider || !keyValue) return
     setTesting(true)
     setError("")
     setResult(null)
+    const t = toast.loading(`Testing ${providerLabel(provider)}…`)
     try {
-      setResult(await validateApiKeyAction(provider, keyValue))
+      const v = await validateApiKeyAction(provider, keyValue)
+      setResult(v)
+      toast.dismiss(t)
+      toastFor(v, providerLabel(provider))
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Test failed")
+      toast.error("Test failed", { id: t, description: e instanceof Error ? e.message : undefined })
     }
     setTesting(false)
   }
@@ -834,9 +872,15 @@ function KeysSection({ data, onSaved }: { data: Snapshot; onSaved: () => void })
     setBusy(true)
     setError("")
     setResult(null)
+    const name = providerLabel(provider)
+    const t = toast.loading(`Verifying + storing ${name}…`)
     try {
       const r = await saveApiKeyAction(provider, keyValue, label)
       if (r.ok) {
+        toast.success(`${name} key stored`, {
+          id: t,
+          description: r.validation?.status === "valid" ? "Live connection verified." : r.validation?.message,
+        })
         setKeyValue("")
         setLabel("")
         setProvider("")
@@ -844,20 +888,27 @@ function KeysSection({ data, onSaved }: { data: Snapshot; onSaved: () => void })
       } else {
         setError(r.error ?? "Failed to save key")
         if (r.validation) setResult(r.validation)
+        toast.error(`${name} key not stored`, { id: t, description: r.error ?? "Failed to save key" })
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save key")
+      toast.error("Failed to save key", { id: t, description: e instanceof Error ? e.message : undefined })
     }
     setBusy(false)
   }
 
   async function verify(p: string) {
     setVerifyBusy(p)
+    const name = providerLabel(p)
+    const t = toast.loading(`Testing ${name}…`)
     try {
       const v = await verifyStoredKeyAction(p)
       setVerifyResults((r) => ({ ...r, [p]: v }))
+      toast.dismiss(t)
+      toastFor(v, name)
     } catch (e) {
-      setVerifyResults((r) => ({ ...r, [p]: { status: "error", message: e instanceof Error ? e.message : "Verify failed" } }))
+      const v: KeyValidation = { status: "error", message: e instanceof Error ? e.message : "Verify failed" }
+      setVerifyResults((r) => ({ ...r, [p]: v }))
+      toast.error(`Couldn't test ${name}`, { id: t, description: v.message })
     }
     setVerifyBusy(null)
   }
@@ -871,6 +922,7 @@ function KeysSection({ data, onSaved }: { data: Snapshot; onSaved: () => void })
       return next
     })
     setBusy(false)
+    toast.success(`${providerLabel(p)} key deleted`)
     onSaved()
   }
 
@@ -1044,15 +1096,17 @@ function KeysSection({ data, onSaved }: { data: Snapshot; onSaved: () => void })
 function AgentsSection({ data, onSaved }: { data: Snapshot; onSaved: () => void }) {
   const [form, setForm] = useState(data.leadgen)
   const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
 
   async function save() {
     setSaving(true)
-    await saveConfigAction("leadgen", form as unknown as Record<string, unknown>)
+    try {
+      await saveConfigAction("leadgen", form as unknown as Record<string, unknown>)
+      toast.success("Agent config saved")
+      onSaved()
+    } catch (e) {
+      toast.error("Couldn't save agent config", { description: e instanceof Error ? e.message : undefined })
+    }
     setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-    onSaved()
   }
 
   return (
@@ -1163,7 +1217,7 @@ function AgentsSection({ data, onSaved }: { data: Snapshot; onSaved: () => void 
         <div className="flex justify-end">
           <Button onClick={save} disabled={saving}>
             {saving ? <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden="true" /> : null}
-            {saved ? "Saved" : "Save agent config"}
+            Save agent config
           </Button>
         </div>
       </CardContent>
@@ -1176,7 +1230,6 @@ function AgentsSection({ data, onSaved }: { data: Snapshot; onSaved: () => void 
 function FunnelsSection({ data, onSaved }: { data: Snapshot; onSaved: () => void }) {
   const [form, setForm] = useState(data.metaAds)
   const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
 
   const hasToken =
     data.keys.some((k) => k.provider === "meta_ads") ||
@@ -1184,11 +1237,14 @@ function FunnelsSection({ data, onSaved }: { data: Snapshot; onSaved: () => void
 
   async function save() {
     setSaving(true)
-    await saveConfigAction("funnels.meta_ads", form as unknown as Record<string, unknown>)
+    try {
+      await saveConfigAction("funnels.meta_ads", form as unknown as Record<string, unknown>)
+      toast.success("Funnel config saved")
+      onSaved()
+    } catch (e) {
+      toast.error("Couldn't save funnel config", { description: e instanceof Error ? e.message : undefined })
+    }
     setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-    onSaved()
   }
 
   return (
@@ -1258,7 +1314,7 @@ function FunnelsSection({ data, onSaved }: { data: Snapshot; onSaved: () => void
         <div className="flex justify-end">
           <Button onClick={save} disabled={saving}>
             {saving ? <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden="true" /> : null}
-            {saved ? "Saved" : "Save funnel config"}
+            Save funnel config
           </Button>
         </div>
       </CardContent>

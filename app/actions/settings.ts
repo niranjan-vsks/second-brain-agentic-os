@@ -300,7 +300,9 @@ export async function applyRecommendedRoutingAction() {
   const merged: LlmBrainConfig = { ...current, strategies: [...byId.values()], defaultStrategy: defaultId }
   await writeBrain(userId, merged)
   revalidatePath("/")
-  return { ok: true, count: strategies.length, defaultId }
+  // Return the merged strategies + default so the client can reflect them
+  // immediately without a manual reload.
+  return { ok: true, count: strategies.length, defaultId, strategies: merged.strategies, defaultStrategy: merged.defaultStrategy }
 }
 
 export async function deleteApiKeyAction(provider: string) {

@@ -116,6 +116,31 @@ const GOOGLE_DEFAULTS: Record<ModelTier, string> = {
 type BrainModel = Parameters<typeof import("ai").generateText>[0]["model"]
 type Provider = "gateway" | "openrouter" | "moonshot" | "google" | "custom"
 
+/** Gateway usable only when a gateway key (or Vercel runtime) is present. */
+function gatewayUsable(): boolean {
+  return Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL)
+}
+
+/**
+ * First direct-provider vault key the operator has stored, in preference order.
+ * Lets agents work off a BYO key when the AI Gateway isn't configured (e.g.
+ * local dev, or before wiring gateway billing). Returns null if none stored.
+ */
+async function firstVaultProvider(userId: string): Promise<Provider | null> {
+  const { getSecret } = await import("@/lib/config")
+  // provider -> [vault key id, extra env vars to also accept]
+  const order: [Provider, string, string[]][] = [
+    ["google", "google_ai", ["GEMINI_API_KEY"]],
+    ["openrouter", "openrouter", []],
+    ["moonshot", "moonshot", []],
+  ]
+  for (const [prov, keyId, extraEnv] of order) {
+    const k = await getSecret(userId, keyId, "llm.autofallback").catch(() => null)
+    if (k || extraEnv.some((e) => process.env[e])) return prov
+  }
+  return null
+}
+
 /** Resolve ONE provider+model into a usable model object (or a gateway string). */
 async function buildModel(
   userId: string,
@@ -148,6 +173,12 @@ async function buildModel(
     return createOpenAICompatible({ name: "custom", apiKey, baseURL: url })(model || process.env.LLM_MODEL || "gpt-4o-mini")
   }
   // gateway
+  // If the AI Gateway isn't usable here (no key / not on Vercel) but the operator
+  // stored a direct-provider key, route through that so agents still work.
+  if (!gatewayUsable()) {
+    const fb = await firstVaultProvider(userId)
+    if (fb) return buildModel(userId, fb, "", tier)
+  }
   if (model) return model
   return getModel(tier)
 }
