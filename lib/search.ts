@@ -17,31 +17,36 @@ export interface SearchResult {
 
 const AUTO_DETECT_ORDER = ["tavily", "brave", "serper"] as const
 
-async function resolveSearchProvider(userId: string): Promise<{ provider: string; key: string } | null> {
+/** All configured search providers, in priority order (pinned first, then the rest with a stored/env key). */
+async function resolveSearchProviders(userId: string): Promise<{ provider: string; key: string }[]> {
+  const out: { provider: string; key: string }[] = []
+  const seen = new Set<string>()
+
   const pinned = process.env.SEARCH_PROVIDER
   if (pinned && pinned !== "crawl4ai") {
     const key = process.env.SEARCH_API_KEY || (await getSecret(userId, pinned)) || ""
-    if (key) return { provider: pinned, key }
+    if (key) {
+      out.push({ provider: pinned, key })
+      seen.add(pinned)
+    }
   }
   for (const provider of AUTO_DETECT_ORDER) {
+    if (seen.has(provider)) continue
     const key = await getSecret(userId, provider)
-    if (key) return { provider, key }
+    if (key) {
+      out.push({ provider, key })
+      seen.add(provider)
+    }
   }
-  return null
+  return out
 }
 
 export async function isSearchConfigured(userId: string): Promise<boolean> {
-  if (await resolveSearchProvider(userId)) return true
+  if ((await resolveSearchProviders(userId)).length > 0) return true
   return process.env.SEARCH_PROVIDER === "crawl4ai" && !!process.env.CRAWL4AI_URL
 }
 
-export async function webSearch(userId: string, query: string, maxResults = 8): Promise<SearchResult[]> {
-  const resolved = await resolveSearchProvider(userId)
-  if (!resolved) {
-    throw new Error("No search provider configured — add a Tavily, Brave, or Serper key in Settings → API Keys")
-  }
-  const { provider, key } = resolved
-
+async function callProvider(provider: string, key: string, query: string, maxResults: number): Promise<SearchResult[]> {
   if (provider === "tavily") {
     const res = await fetch("https://api.tavily.com/search", {
       method: "POST",
@@ -76,14 +81,31 @@ export async function webSearch(userId: string, query: string, maxResults = 8): 
     return (data.organic ?? []).map((r) => ({ title: r.title, url: r.link, snippet: r.snippet }))
   }
 
-  if (provider === "crawl4ai") {
-    // Self-hosted crawl4ai (same capability used for LinkedIn OS). Its /crawl
-    // endpoint fetches + extracts a URL; for search we crawl a search-engine
-    // results page is unreliable, so crawl4ai is primarily used by fetchPage below.
-    throw new Error("crawl4ai supports page fetching, not keyword search — set SEARCH_PROVIDER to tavily/brave/serper for search and keep CRAWL4AI_URL for page extraction")
+  throw new Error(`Unknown search provider: ${provider}`)
+}
+
+/**
+ * Web search with automatic fallback: tries every configured provider in
+ * priority order (pinned first, then tavily -> brave -> serper) and only
+ * throws once all of them have failed. Previously this stopped at the FIRST
+ * configured provider and threw immediately on any failure, even when a
+ * working fallback key was sitting right there in the vault.
+ */
+export async function webSearch(userId: string, query: string, maxResults = 8): Promise<SearchResult[]> {
+  const providers = await resolveSearchProviders(userId)
+  if (providers.length === 0) {
+    throw new Error("No search provider configured — add a Tavily, Brave, or Serper key in Settings → API Keys")
   }
 
-  throw new Error("No search provider configured (set SEARCH_PROVIDER + SEARCH_API_KEY)")
+  const errors: string[] = []
+  for (const { provider, key } of providers) {
+    try {
+      return await callProvider(provider, key, query, maxResults)
+    } catch (e) {
+      errors.push(`${provider}: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+  throw new Error(`All configured search providers failed — ${errors.join(" | ")}`)
 }
 
 // Page fetch/extraction — prefers crawl4ai when configured (handles SPAs/JS),
