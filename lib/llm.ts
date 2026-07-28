@@ -95,10 +95,16 @@ export function getModel(tier: ModelTier = "heavy"): Parameters<typeof import("a
 // =============================================================================
 
 const MOONSHOT_BASE = "https://api.moonshot.ai/v1"
+// Direct-Moonshot model ids differ from OpenRouter's namespaced ids and vary by
+// account permissions ("kimi-latest" 404'd on the owner's key). We route Kimi
+// through OpenRouter in the fallback chain instead; this default only applies if
+// the operator explicitly picks the Moonshot provider in Settings (where the
+// model-discovery dropdown shows their actual available ids). kimi-k2-0711-preview
+// is the broadest-compatibility historical id.
 const MOONSHOT_DEFAULTS: Record<ModelTier, string> = {
-  light: "kimi-latest",
-  standard: "kimi-latest",
-  heavy: "kimi-latest",
+  light: "kimi-k2-0711-preview",
+  standard: "kimi-k2-0711-preview",
+  heavy: "kimi-k2-0711-preview",
 }
 const OPENROUTER_DEFAULTS: Record<ModelTier, string> = {
   light: "google/gemini-3.5-flash-lite",
@@ -250,23 +256,29 @@ export async function getModelForUser(userId: string, tier: ModelTier = "heavy",
 // vault. getModelChainForUser returns the user's chosen brain FIRST, then
 // provider-diverse fallbacks; generateTextResilient tries each in order.
 
-/** Cross-provider fallback candidates per tier (provider-diverse, ordered). */
+/**
+ * Cross-provider fallback candidates per tier, ordered. All Kimi routed via
+ * OpenRouter (verified ids) — NOT direct Moonshot, whose model ids vary by
+ * account permission and 404 unpredictably. Multiple OpenRouter models are
+ * fine: they route to different upstreams, and the chain dedups by
+ * provider+model (not provider), so distinct models coexist. If OpenRouter is
+ * account-dead (out of credits / bad key) the loop skips its siblings.
+ */
 const FALLBACK_CANDIDATES: Record<ModelTier, BrainChoice[]> = {
-  // Provider-diverse so one provider's outage/credit-exhaustion is always
-  // covered by a different one. Deduped by provider at chain-build time.
   heavy: [
     { provider: "openrouter", model: "moonshotai/kimi-k3" }, // smart brain
-    { provider: "google", model: "gemini-3.5-flash" },
-    { provider: "moonshot", model: "" }, // Kimi via direct Moonshot (distinct infra from OpenRouter)
+    { provider: "google", model: "gemini-3.5-flash" }, // different provider entirely
+    { provider: "openrouter", model: "anthropic/claude-sonnet-4.5" }, // premium, reliable
+    { provider: "openrouter", model: "deepseek/deepseek-v4-pro" }, // cheap, reliable
   ],
   standard: [
     { provider: "google", model: "gemini-3.5-flash" },
     { provider: "openrouter", model: "moonshotai/kimi-k3" },
-    { provider: "moonshot", model: "" },
+    { provider: "openrouter", model: "deepseek/deepseek-v4-flash" },
   ],
   light: [
     { provider: "google", model: "gemini-3.5-flash-lite" },
-    { provider: "openrouter", model: "google/gemini-2.5-flash-lite" },
+    { provider: "openrouter", model: "google/gemini-3.5-flash-lite" },
   ],
 }
 
@@ -286,23 +298,32 @@ async function providerHasKey(userId: string, provider: Provider): Promise<boole
   return Boolean(k || m.env.some((e) => process.env[e]))
 }
 
+/** One entry in the resilient model chain — the built model plus its provider tag. */
+interface ChainEntry {
+  model: BrainModel
+  provider: Provider
+  label: string
+}
+
 /**
- * Ordered list of built models to try: the user's configured brain choice
- * first, then provider-diverse fallbacks whose keys exist. Deduped by provider
- * so we don't retry the same failing service twice. Always ends with the
- * gateway/env default as a last resort.
+ * Ordered list of models to try: the user's configured brain choice first,
+ * then fallbacks whose keys exist. Deduped by provider+model (distinct models
+ * on the same provider are kept — OpenRouter routes them to different
+ * upstreams). Always ends with a buildable last resort so the chain is never
+ * empty.
  */
-export async function getModelChainForUser(userId: string, tier: ModelTier = "heavy", task?: string): Promise<BrainModel[]> {
+export async function getModelChainForUser(userId: string, tier: ModelTier = "heavy", task?: string): Promise<ChainEntry[]> {
   const primary = await resolveBrainChoice(userId, tier, task)
-  const chain: BrainModel[] = []
-  const usedProviders = new Set<Provider>()
+  const chain: ChainEntry[] = []
+  const usedKeys = new Set<string>()
 
   const add = async (c: BrainChoice) => {
-    if (usedProviders.has(c.provider)) return
+    const key = `${c.provider}:${c.model || "default"}`
+    if (usedKeys.has(key)) return
     if (!(await providerHasKey(userId, c.provider))) return
     try {
-      chain.push(await buildModel(userId, c.provider, c.model, tier, c.baseUrl))
-      usedProviders.add(c.provider)
+      chain.push({ model: await buildModel(userId, c.provider, c.model, tier, c.baseUrl), provider: c.provider, label: key })
+      usedKeys.add(key)
     } catch {
       // key/config missing for this provider — skip it silently
     }
@@ -310,8 +331,8 @@ export async function getModelChainForUser(userId: string, tier: ModelTier = "he
 
   await add(primary)
   for (const cand of FALLBACK_CANDIDATES[tier]) await add(cand)
-  // Last resort: env/gateway default (always buildable, may itself fall back to a vault key)
-  if (chain.length === 0) chain.push(await buildModel(userId, "gateway", "", tier))
+  // Last resort: env/gateway default (always buildable, may itself route to a vault key)
+  if (chain.length === 0) chain.push({ model: await buildModel(userId, "gateway", "", tier), provider: "gateway", label: "gateway:default" })
   return chain
 }
 
@@ -345,13 +366,39 @@ export function isTransientLLMError(e: unknown): boolean {
   )
 }
 
+/**
+ * Account-level failure: the provider's KEY is unusable (bad/expired key, no
+ * permission, out of credits, over quota). Every model on that provider will
+ * fail identically, so we skip its remaining chain entries — but still try
+ * OTHER providers, whose keys may be fine.
+ */
+function isAccountDeadError(e: unknown): boolean {
+  const msg = (e instanceof Error ? e.message : String(e)).toLowerCase()
+  return (
+    /\b(401|403|402)\b/.test(msg) ||
+    msg.includes("unauthorized") ||
+    msg.includes("permission denied") ||
+    msg.includes("invalid api key") ||
+    msg.includes("invalid_api_key") ||
+    msg.includes("no auth credentials") ||
+    msg.includes("requires more credits") ||
+    msg.includes("can only afford") ||
+    msg.includes("insufficient") ||
+    msg.includes("payment required") ||
+    msg.includes("credit card") ||
+    msg.includes("quota")
+  )
+}
+
 type GenerateTextParams = Parameters<typeof import("ai").generateText>[0]
 
 /**
  * generateText with automatic cross-provider fallback. Tries the user's brain
- * choice, then provider-diverse fallbacks, hopping only on TRANSIENT errors
- * (5xx / overloaded / rate-limit / timeout). Non-transient errors (auth, bad
- * request) surface immediately — retrying a different provider won't help.
+ * choice, then provider-diverse fallbacks, and NEVER dies on a single bad entry
+ * — it walks the entire chain, only throwing once every option is exhausted.
+ * When a provider's KEY is dead (auth/credits/quota) its remaining entries are
+ * skipped (they'd fail identically), but other providers are still tried.
+ * Each attempt gets maxRetries with backoff to ride out intermittent 503s.
  */
 export async function generateTextResilient(
   userId: string,
@@ -361,22 +408,25 @@ export async function generateTextResilient(
 ): Promise<{ text: string; steps?: unknown }> {
   const { generateText } = await import("ai")
   const chain = await getModelChainForUser(userId, tier, task)
-  let lastErr: unknown
+  const deadProviders = new Set<Provider>()
+  const errors: string[] = []
+
   for (let i = 0; i < chain.length; i++) {
+    const entry = chain[i]
+    if (deadProviders.has(entry.provider)) continue // key already proven dead this call
     try {
-      // maxRetries (with the AI SDK's exponential backoff) rides out an
-      // INTERMITTENTLY-flaky provider (e.g. Gemini's "high demand" 503s that
-      // clear within a second) before we bother hopping to the next provider.
-      const r = await generateText({ ...(params as GenerateTextParams), model: chain[i], maxRetries: 4 })
+      const r = await generateText({ ...(params as GenerateTextParams), model: entry.model, maxRetries: 4 })
       return { text: r.text, steps: r.steps }
     } catch (e) {
-      lastErr = e
-      const transient = isTransientLLMError(e)
-      console.error(`[llm] ${task ?? tier} attempt ${i + 1}/${chain.length} failed (${transient ? "transient" : "hard"}):`, e instanceof Error ? e.message : e)
-      if (!transient) throw e // auth/bad-request — don't burn the whole chain
+      const msg = e instanceof Error ? e.message : String(e)
+      const accountDead = isAccountDeadError(e)
+      if (accountDead) deadProviders.add(entry.provider)
+      errors.push(`${entry.label}: ${msg.slice(0, 120)}`)
+      console.error(`[llm] ${task ?? tier} attempt ${i + 1}/${chain.length} (${entry.label}) failed${accountDead ? " [key dead — skipping provider]" : ""}: ${msg.slice(0, 200)}`)
+      // never throw mid-chain — keep trying other options
     }
   }
-  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr))
+  throw new Error(`All ${chain.length} model option(s) failed — ${errors.join(" | ")}`)
 }
 
 /** Human-readable description of the active brain per tier, for settings UI / diagnostics. */
