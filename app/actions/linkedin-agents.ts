@@ -16,7 +16,7 @@ import { and, desc, eq, asc } from "drizzle-orm"
 import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
 
-import { getModelForUser } from "@/lib/llm"
+import { getModelForUser, generateTextResilient } from "@/lib/llm"
 import { getAgentOverride, directiveBlock } from "@/lib/config"
 import { skillsBlockFor } from "@/lib/skills"
 
@@ -88,8 +88,7 @@ export async function composeDraft(input: {
   const override = await getAgentOverride(userId, "linkedin_post") // Jarvis-set operator directives
   const skillsCtx = await skillsBlockFor(userId, "linkedin_post") // Arsenal skills assigned to this agent
 
-  const { text } = await generateText({
-    model: await getModelForUser(userId, "standard"),
+  const { text } = await generateTextResilient(userId, "standard", undefined, {
     system: `You are a LinkedIn ghost-writer for a senior agentic AI engineer. Write a single LinkedIn post. ${lengthRule} Strong hook in the first line. No hashtag spam (max 3). No client names, employer internals, or proprietary stack details. No fabricated numbers or engagement bait.
 
 ${claimStatusGuard(input.claimStatus)}${styleCtx}
@@ -170,8 +169,7 @@ export async function tweakDraft(postId: number, instruction: string) {
 
   const trendCtx = trend ? `\n\nOriginal trend item:\nTitle: ${trend.title}\nSummary: ${trend.summary}` : ""
 
-  const { text } = await generateText({
-    model: await getModelForUser(userId, "standard"),
+  const { text } = await generateTextResilient(userId, "standard", undefined, {
     system: `You are the Tweak Agent for a LinkedIn draft-review workflow. The owner gives you tweak instructions; you revise the draft.
 
 ${claimStatusGuard(post.claimStatus)}

@@ -7,7 +7,7 @@ import { and, desc, eq } from "drizzle-orm"
 import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
 import { generateText } from "ai"
-import { getModelForUser } from "@/lib/llm"
+import { getModelForUser, generateTextResilient } from "@/lib/llm"
 import { getAgentOverride, directiveBlock } from "@/lib/config"
 import { skillsBlockFor } from "@/lib/skills"
 import { isHiggsfieldConfigured, submitGeneration } from "@/lib/higgsfield"
@@ -51,8 +51,7 @@ export async function generateAdCreative(input: {
   const skillsCtx = await skillsBlockFor(userId, "ads_creative") // Arsenal skills
 
   try {
-    const { text } = await generateText({
-      model: await getModelForUser(userId, "standard", "ads.creative"), // ads.creative — structured drafting
+    const { text } = await generateTextResilient(userId, "standard", "ads.creative", { // ads.creative — structured drafting
       system: `You are an ad creative script composer. Write ${typeGuidance}. Output STRICT JSON: {"premise": "...", "script": "...", "videoPrompt": "single text-to-video generation prompt, max 900 chars"}. JSON only, no fences.${directiveBlock(override)}${skillsCtx}`,
       prompt: `Client brief: ${input.brief}`,
     })

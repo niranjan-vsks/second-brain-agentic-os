@@ -7,7 +7,7 @@ import { and, desc, eq } from "drizzle-orm"
 import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
 import { generateText } from "ai"
-import { getModelForUser } from "@/lib/llm"
+import { getModelForUser, generateTextResilient } from "@/lib/llm"
 import { getAgentOverride, directiveBlock } from "@/lib/config"
 import { skillsBlockFor } from "@/lib/skills"
 import { isHiggsfieldConfigured, submitGeneration } from "@/lib/higgsfield"
@@ -39,8 +39,7 @@ export async function composeScript(projectId: string) {
   const skillsCtx = await skillsBlockFor(userId, "youtube_script") // Arsenal skills
 
   try {
-    const { text } = await generateText({
-      model: await getModelForUser(userId, "heavy", "youtube.script_compose"), // youtube.script_compose — long-form creative structure
+    const { text } = await generateTextResilient(userId, "heavy", "youtube.script_compose", { // youtube.script_compose — long-form creative structure
       system: `You are a YouTube script composer for: ${settings?.contentDomain || "general content"}.
 Tone/voice notes: ${settings?.toneVoiceNotes || "engaging, punchy, hook-first"}.
 Video format: ${project.videoFormat} (${project.videoFormat === "shorts" ? "15-60 seconds, vertical" : "3-15 minutes"}).
@@ -105,8 +104,7 @@ export async function buildPromptAndGenerate(projectId: string) {
     .limit(1)
   if (!script) throw new Error("No script revision found")
 
-  const { text: videoPrompt } = await generateText({
-    model: await getModelForUser(userId, "standard", "youtube.prompt_builder"), // youtube.prompt_builder — condensing, not deep reasoning
+  const { text: videoPrompt } = await generateTextResilient(userId, "standard", "youtube.prompt_builder", { // youtube.prompt_builder — condensing, not deep reasoning
     system: `You are a video-generation prompt engineer. Convert the shot breakdown into ONE cohesive text-to-video prompt (max 900 chars) describing visuals, motion, pacing, and style for a ${project.videoFormat === "shorts" ? "vertical 9:16 short" : "16:9 long-form"} video. Output prompt text only.`,
     prompt: `Premise: ${project.premise}\nShot breakdown: ${script.shotBreakdown}`,
   })

@@ -14,7 +14,7 @@ import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { skills, automations, automationRuns } from "@/lib/db/schema"
 import { and, desc, eq } from "drizzle-orm"
-import { getModelForUser } from "@/lib/llm"
+import { getModelForUser, generateTextResilient } from "@/lib/llm"
 import { AGENT_KEYS } from "@/lib/config"
 import { parseSkillMarkdown, upsertSkill, isAgentKey, type ParsedSkill } from "@/lib/skills"
 import { CURATED_PACK } from "@/lib/skills-seed"
@@ -265,8 +265,7 @@ export async function ingestSkillRepo(repoUrl: string) {
 }
 
 async function inferSkillMeta(userId: string, parsed: ParsedSkill): Promise<{ description: string; tags: string; targetAgents: string }> {
-  const { text } = await generateText({
-    model: await getModelForUser(userId, "standard", "arsenal.skill_extract"), // arsenal.skill_extract — metadata inference for frontmatter-less skill files
+  const { text } = await generateTextResilient(userId, "standard", "arsenal.skill_extract", { // arsenal.skill_extract — metadata inference for frontmatter-less skill files
     system: `You classify a "skill" document for an operator OS with exactly these agents:
 ${Object.entries(AGENT_KEYS)
   .map(([k, v]) => `- ${k}: ${v}`)
@@ -370,8 +369,7 @@ export async function analyzeAutomation(id: string) {
   const defStr = JSON.stringify(row.definition).slice(0, 30000)
 
   try {
-    const { text } = await generateText({
-      model: await getModelForUser(userId, "heavy", "arsenal.analyze_automation"), // arsenal.analyze_automation — workflow JSON → capability analysis + absorbable parts
+    const { text } = await generateTextResilient(userId, "heavy", "arsenal.analyze_automation", { // arsenal.analyze_automation — workflow JSON → capability analysis + absorbable parts
       system: `You analyze n8n workflow JSON for a personal operator OS whose existing agents are:
 ${Object.entries(AGENT_KEYS)
   .map(([k, v]) => `- ${k}: ${v}`)

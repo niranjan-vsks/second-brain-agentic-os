@@ -82,8 +82,7 @@ export async function jarvisChat(
       inputSchema: z.object({ question: z.string().describe("Plain-English question about OS data") }),
       execute: async ({ question }) => {
         // Reuse the hardened text-to-SQL path: generate, validate, execute.
-        const { text: rawSql } = await generateText({
-          model: await getModelForUser(userId, "standard", "os_chat.text_to_sql"), // jarvis.query_os_data — SQL generation
+        const { text: rawSql } = await generateTextResilient(userId, "standard", "os_chat.text_to_sql", { // jarvis.query_os_data — SQL generation
           system: `Convert the question to a single PostgreSQL SELECT statement. Output ONLY SQL, no markdown. Always filter user-owned tables by "userId" = $1. Schema:\n${SCHEMA_DESCRIPTION}`,
           prompt: question,
         })

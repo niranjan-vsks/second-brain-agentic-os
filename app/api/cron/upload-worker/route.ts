@@ -9,7 +9,7 @@ import { videoProjects, generationJobs, editVersions, youtubeVideos, youtubeChan
 import { and, desc, eq } from "drizzle-orm"
 import { uploadVideo, isYoutubeOAuthConfigured } from "@/lib/youtube-api"
 import { generateText } from "ai"
-import { getModelForUser } from "@/lib/llm"
+import { getModelForUser, generateTextResilient } from "@/lib/llm"
 import { randomUUID } from "crypto"
 
 export const maxDuration = 300
@@ -53,8 +53,7 @@ export async function GET(req: Request) {
       }
       if (!videoUrl) throw new Error("No completed video available")
 
-      const { text } = await generateText({
-        model: await getModelForUser(project.userId, "light"), // youtube.title_variants — metadata formatting
+      const { text } = await generateTextResilient(project.userId, "light", undefined, { // youtube.title_variants — metadata formatting
         system: `Write YouTube metadata. Output STRICT JSON: {"title": "max 90 chars, high-CTR", "description": "2-4 sentences + relevant hashtags", "tags": ["tag1","tag2",...max 10]}. JSON only.`,
         prompt: `Topic: ${project.topic}\nPremise: ${project.premise}\nFormat: ${project.videoFormat}`,
       })

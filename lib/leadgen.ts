@@ -19,7 +19,7 @@ import { randomUUID } from "crypto"
 import { db } from "@/lib/db"
 import { leadgenProspects, leadgenRuns, leads } from "@/lib/db/schema"
 import { and, eq } from "drizzle-orm"
-import { getModelForUser } from "@/lib/llm"
+import { getModelForUser, generateTextResilient } from "@/lib/llm"
 import {
   getSecret,
   getConfig,
@@ -179,16 +179,14 @@ async function qualifyBatch(
   const system = QUALIFIER_PROMPT + directiveBlock(operatorDirective) + skillsCtx
 
   // standard tier with one manual escalation to heavy on parse failure
-  const { text } = await generateText({
-    model: await getModelForUser(userId, "standard", "leadgen.qualify"), // leadgen.qualify — structured scoring against ICP
+  const { text } = await generateTextResilient(userId, "standard", "leadgen.qualify", { // leadgen.qualify — structured scoring against ICP
     system,
     prompt,
   })
   const first = parse(text)
   if (first) return first
 
-  const { text: retry } = await generateText({
-    model: await getModelForUser(userId, "heavy", "leadgen.qualify"), // leadgen.qualify escalation — retry on invalid JSON
+  const { text: retry } = await generateTextResilient(userId, "heavy", "leadgen.qualify", { // leadgen.qualify escalation — retry on invalid JSON
     system,
     prompt,
   })
