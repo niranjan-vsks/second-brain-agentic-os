@@ -95,16 +95,14 @@ export function getModel(tier: ModelTier = "heavy"): Parameters<typeof import("a
 // =============================================================================
 
 const MOONSHOT_BASE = "https://api.moonshot.ai/v1"
-// Direct-Moonshot model ids differ from OpenRouter's namespaced ids and vary by
-// account permissions ("kimi-latest" 404'd on the owner's key). We route Kimi
-// through OpenRouter in the fallback chain instead; this default only applies if
-// the operator explicitly picks the Moonshot provider in Settings (where the
-// model-discovery dropdown shows their actual available ids). kimi-k2-0711-preview
-// is the broadest-compatibility historical id.
+// "kimi-latest" 404'd — confirmed DEPRECATED per Moonshot's own model list
+// (platform.kimi.ai/docs/models), along with kimi-k2-0711-preview and every
+// other kimi-k2-* preview id. "kimi-k3" is the current active flagship
+// (same id on OpenRouter as moonshotai/kimi-k3, and direct as just "kimi-k3").
 const MOONSHOT_DEFAULTS: Record<ModelTier, string> = {
-  light: "kimi-k2-0711-preview",
-  standard: "kimi-k2-0711-preview",
-  heavy: "kimi-k2-0711-preview",
+  light: "kimi-k2.7-code",
+  standard: "kimi-k3",
+  heavy: "kimi-k3",
 }
 const OPENROUTER_DEFAULTS: Record<ModelTier, string> = {
   light: "google/gemini-3.5-flash-lite",
@@ -257,27 +255,31 @@ export async function getModelForUser(userId: string, tier: ModelTier = "heavy",
 // provider-diverse fallbacks; generateTextResilient tries each in order.
 
 /**
- * Cross-provider fallback candidates per tier, ordered. All Kimi routed via
- * OpenRouter (verified ids) — NOT direct Moonshot, whose model ids vary by
- * account permission and 404 unpredictably. Multiple OpenRouter models are
- * fine: they route to different upstreams, and the chain dedups by
- * provider+model (not provider), so distinct models coexist. If OpenRouter is
- * account-dead (out of credits / bad key) the loop skips its siblings.
+ * Cross-provider fallback candidates per tier, ordered. Funded-by-default
+ * providers (direct Moonshot for Kimi, direct Google for Gemini) come FIRST —
+ * OpenRouter is a BYO seam that's often unfunded, so it's ordered LAST as a
+ * bonus fallback (Claude/DeepSeek variety), never blocking the funded path.
+ * Chain dedups by provider+model, so distinct models on the same provider
+ * coexist. If a provider's key is account-dead (no credits/bad key) the loop
+ * skips its remaining siblings.
  */
 const FALLBACK_CANDIDATES: Record<ModelTier, BrainChoice[]> = {
   heavy: [
-    { provider: "openrouter", model: "moonshotai/kimi-k3" }, // smart brain
-    { provider: "google", model: "gemini-3.5-flash" }, // different provider entirely
-    { provider: "openrouter", model: "anthropic/claude-sonnet-4.5" }, // premium, reliable
-    { provider: "openrouter", model: "deepseek/deepseek-v4-pro" }, // cheap, reliable
+    { provider: "moonshot", model: "kimi-k3" }, // direct Moonshot — funded, primary brain
+    { provider: "google", model: "gemini-3.5-flash" }, // direct Google — funded
+    { provider: "openrouter", model: "moonshotai/kimi-k3" }, // Kimi via OpenRouter (if ever funded)
+    { provider: "openrouter", model: "anthropic/claude-sonnet-4.5" },
+    { provider: "openrouter", model: "deepseek/deepseek-v4-pro" },
   ],
   standard: [
     { provider: "google", model: "gemini-3.5-flash" },
+    { provider: "moonshot", model: "kimi-k3" },
     { provider: "openrouter", model: "moonshotai/kimi-k3" },
     { provider: "openrouter", model: "deepseek/deepseek-v4-flash" },
   ],
   light: [
     { provider: "google", model: "gemini-3.5-flash-lite" },
+    { provider: "moonshot", model: "kimi-k2.7-code" },
     { provider: "openrouter", model: "google/gemini-3.5-flash-lite" },
   ],
 }

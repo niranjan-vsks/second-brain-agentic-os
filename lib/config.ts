@@ -294,21 +294,23 @@ export function recommendedStrategies(): { strategies: RoutingStrategy[]; defaul
       id: "kimi-brain",
       name: "Kimi Brain (recommended)",
       tiers: {
-        // Kimi K3 is the smart brain (heavy = Jarvis, deep reasoning); Gemini 3.5
-        // flash handles the cheaper high-volume tiers. Kimi routed via OpenRouter
-        // (verified reliable). Resilient fallback covers any provider outage.
+        // Kimi K3 is the smart brain (heavy = Jarvis, deep reasoning), hit via
+        // DIRECT Moonshot (funded key) — not OpenRouter, which is a BYO seam
+        // often left unfunded. Gemini via DIRECT Google (also funded) handles
+        // the cheaper high-volume tiers. Resilient fallback (lib/llm.ts) still
+        // covers any single-provider outage automatically.
         light: { provider: "google", model: "gemini-3.5-flash-lite" },
         standard: { provider: "google", model: "gemini-3.5-flash" },
-        heavy: { provider: "openrouter", model: "moonshotai/kimi-k3" },
+        heavy: { provider: "moonshot", model: "kimi-k3" },
       },
     },
     {
       id: "max-quality",
       name: "Max Quality (all Kimi)",
       tiers: {
-        light: { provider: "google", model: "gemini-3.5-flash" },
-        standard: { provider: "openrouter", model: "moonshotai/kimi-k3" },
-        heavy: { provider: "openrouter", model: "moonshotai/kimi-k3" },
+        light: { provider: "moonshot", model: "kimi-k2.7-code" },
+        standard: { provider: "moonshot", model: "kimi-k3" },
+        heavy: { provider: "moonshot", model: "kimi-k3" },
       },
     },
     {

@@ -35,18 +35,21 @@ const strategies = [
     id: "kimi-brain",
     name: "Kimi Brain (recommended)",
     tiers: {
+      // Direct Moonshot + direct Google — both funded keys. OpenRouter (BYO,
+      // often unfunded) is not the primary path; the resilient chain in
+      // lib/llm.ts still tries it as an extra fallback automatically.
       light: { provider: "google", model: "gemini-3.5-flash-lite" },
       standard: { provider: "google", model: "gemini-3.5-flash" },
-      heavy: { provider: "openrouter", model: "moonshotai/kimi-k3" },
+      heavy: { provider: "moonshot", model: "kimi-k3" },
     },
   },
   {
     id: "max-quality",
     name: "Max Quality (all Kimi)",
     tiers: {
-      light: { provider: "google", model: "gemini-3.5-flash" },
-      standard: { provider: "openrouter", model: "moonshotai/kimi-k3" },
-      heavy: { provider: "openrouter", model: "moonshotai/kimi-k3" },
+      light: { provider: "moonshot", model: "kimi-k2.7-code" },
+      standard: { provider: "moonshot", model: "kimi-k3" },
+      heavy: { provider: "moonshot", model: "kimi-k3" },
     },
   },
   {
@@ -61,7 +64,7 @@ const strategies = [
 ]
 
 const brain = {
-  provider: "openrouter", // legacy fallback engine; strategy above drives per-tier routing
+  provider: "moonshot", // legacy fallback engine; strategy above drives per-tier routing
   baseUrl: "",
   models: { light: "", standard: "", heavy: "" },
   strategies,
@@ -86,7 +89,7 @@ try {
       userId,
       "llm_brain",
     ])
-    console.log(`Updated llm_brain for ${email} (${userId}) -> provider=openrouter, default=kimi-brain`)
+    console.log(`Updated llm_brain for ${email} (${userId}) -> provider=moonshot, default=kimi-brain`)
   } else {
     await pool.query('INSERT INTO app_config (id, "userId", key, value) VALUES ($1, $2, $3, $4)', [
       randomUUID(),
@@ -94,7 +97,7 @@ try {
       "llm_brain",
       JSON.stringify(brain),
     ])
-    console.log(`Inserted llm_brain for ${email} (${userId}) -> provider=openrouter, default=kimi-brain`)
+    console.log(`Inserted llm_brain for ${email} (${userId}) -> provider=moonshot, default=kimi-brain`)
   }
 } finally {
   await pool.end()
